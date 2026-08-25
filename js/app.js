@@ -53,7 +53,7 @@ const IS_STANDALONE = navigator.standalone === true || matchMedia("(display-mode
 
 /* ═══════════════════ onboarding ═══════════════════ */
 
-const OB = { step: 0, name: "", sex: "", age: null, units: "us", ft: 5, in: 8, cm: null, weight: null, activity: 1.375, goal: null, p: null, c: null, f: null, bonus: 300 };
+const OB = { step: 0, name: "", sex: "", age: null, units: "us", ft: 5, in: 8, cm: null, weight: null, activity: 1.375, goal: null, p: null, c: null, f: null, bonus: 300, water: 2.5 };
 const OB_STEPS = 5;
 
 function showOnboarding() {
@@ -169,6 +169,7 @@ function wireOnboarding() {
   });
   ["p", "c", "f"].forEach(k => $(`#ob-${k}`).addEventListener("input", e => { OB[k] = +e.target.value || null; }));
   $("#ob-bonus").addEventListener("input", e => { OB.bonus = +e.target.value || 0; });
+  $("#ob-water").addEventListener("input", e => { OB.water = clamp(+e.target.value || 2.5, 0.5, 10); });
 
   $("#ob-finish").addEventListener("click", () => {
     Store.profile = {
@@ -176,7 +177,7 @@ function wireOnboarding() {
       heightCm: Math.round(obHeightCm()), weightKg: Math.round(obWeightKg() * 10) / 10,
       units: OB.units, activity: OB.activity,
       goalKcal: OB.goal, macroP: OB.p, macroC: OB.c, macroF: OB.f,
-      bonus: OB.bonus, model: "best",
+      bonus: OB.bonus, waterGoal: OB.water,
     };
     Store.saveProfile();
     successPop();
@@ -214,6 +215,33 @@ function wireApp() {
     $("#ex-toggle").setAttribute("aria-pressed", String(d.ex));
     renderToday(false);
   });
+  $("#water-plus").addEventListener("click", () => adjustWater(0.25));
+  $("#water-minus").addEventListener("click", () => adjustWater(-0.25));
+}
+
+/* ---- water ---- */
+
+const litres = n => (Math.round(n * 100) / 100).toString();
+
+function adjustWater(delta) {
+  const d = Store.day(Store.todayKey());
+  d.water = clamp(Math.round(((d.water || 0) + delta) * 100) / 100, 0, 15);
+  Store.saveDays();
+  buzz(8);
+  if (delta > 0) {
+    const ic = $("#water-icon");
+    ic.classList.remove("pop"); void ic.offsetWidth; ic.classList.add("pop");
+  }
+  renderWater();
+}
+
+function renderWater() {
+  const d = Store.day(Store.todayKey());
+  const w = d.water || 0;
+  const goal = Store.profile.waterGoal || 2.5;
+  $("#water-val").textContent = `${litres(w)} / ${litres(goal)} L`;
+  $("#water-fill").style.width = clamp(w / goal * 100, 0, 100) + "%";
+  $(".water-card").classList.toggle("done", w >= goal);
 }
 
 function switchView(name) {
@@ -258,6 +286,8 @@ function renderToday(animate) {
   animateNum(big, target, animate ? 800 : 500);
   $("#ring-eaten").textContent = fmt(t.kcal);
   $("#ring-goal").textContent = fmt(goal);
+
+  renderWater();
 
   // macros
   const showMacros = p.macroP || p.macroC || p.macroF;
@@ -526,7 +556,6 @@ function logAnalyzedMeal() {
 
 function handleAIError(e) {
   toast(e.message || "Something went wrong.", "err");
-  if (e.code === "auth" || e.code === "nokey") setTimeout(openSettings, 900);
 }
 
 /* ═══════════════════ live label scan ═══════════════════ */
@@ -817,6 +846,7 @@ function renderHistory() {
       <button class="day-head" data-k="${k}">
         <span class="day-title">${date}</span>
         ${d.ex ? '<svg class="day-flame" viewBox="0 0 24 24"><path d="M12 2s1 3.2-1.5 6C8.2 10.5 7 12.3 7 14.5a5 5 0 0 0 10 0c0-1.6-.6-2.9-1.4-4-.3 1-.9 1.9-1.8 2.4.4-2.5-.3-5.8-1.8-7.9z" fill="currentColor"/></svg>' : ""}
+        ${d.water > 0 ? `<span class="day-water"><svg viewBox="0 0 24 24"><path d="M12 2.7S6 9.6 6 14a6 6 0 0 0 12 0c0-4.4-6-11.3-6-11.3z" fill="currentColor"/></svg>${litres(d.water)}L</span>` : ""}
         <span class="day-kcal">${fmt(t.kcal)} / ${fmt(goal)}</span>
         <span class="day-chip ${over ? "over" : "under"}">${over ? "+" + fmt(t.kcal - goal) : "✓"}</span>
       </button>
@@ -836,7 +866,6 @@ function renderHistory() {
 function wireSettings() {
   segWire($("#set-sex"), v => { Store.profile.sex = v; saveSettings(); });
   segWire($("#set-units"), v => { Store.profile.units = v; Store.saveProfile(); populateSettings(); });
-  segWire($("#set-model"), v => { Store.profile.model = v; Store.saveProfile(); $("#model-hint").textContent = AI.MODEL_HINTS[v]; });
 
   const bind = (id, fn) => $(id).addEventListener("change", e => { fn(e.target.value); saveSettings(); });
   bind("#set-name", v => Store.profile.name = v.trim() || Store.profile.name);
@@ -854,16 +883,9 @@ function wireSettings() {
   bind("#set-c", v => Store.profile.macroC = +v > 0 ? Math.round(+v) : null);
   bind("#set-f", v => Store.profile.macroF = +v > 0 ? Math.round(+v) : null);
   bind("#set-bonus", v => Store.profile.bonus = Math.max(0, Math.round(+v || 0)));
+  bind("#set-water", v => { const n = +v; if (n >= 0.5 && n <= 10) Store.profile.waterGoal = Math.round(n * 100) / 100; });
 
   $("#settings-done").addEventListener("click", closeSheet);
-
-  $("#set-key-test").addEventListener("click", async () => {
-    const btn = $("#set-key-test");
-    btn.textContent = "Testing…";
-    try { await AI.testKey(Store.key); btn.textContent = "Working ✓"; toast("Claude is connected", "ok"); }
-    catch (e) { btn.textContent = "Test"; toast(e.message, "err"); }
-    setTimeout(() => btn.textContent = "Test", 2500);
-  });
 
   $("#set-reset").addEventListener("click", async () => {
     closeSheet();
@@ -895,8 +917,7 @@ function populateSettings() {
   $("#set-c").value = p.macroC || "";
   $("#set-f").value = p.macroF || "";
   $("#set-bonus").value = p.bonus;
-  segSet($("#set-model"), p.model || "best");
-  $("#model-hint").textContent = AI.MODEL_HINTS[p.model || "best"];
+  $("#set-water").value = p.waterGoal || 2.5;
 }
 
 function openSettings() {

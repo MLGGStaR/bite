@@ -12,6 +12,7 @@
   --p: #E8386D;
   --c: #DE8500;
   --f: #1E93B0;
+  --water: #1F7FDB;
   --over: #C81E3E;
   --dark: #0E0F12;
   --radius: 24px;
@@ -269,6 +270,39 @@ button { font-family: inherit; border: 0; background: none; color: inherit; curs
 .macro-row[data-m="f"] .macro-fill { background: var(--f); }
 .macro-val { font-size: 13.5px; font-weight: 600; color: var(--ink-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
 
+/* ═══════════ water ═══════════ */
+.water-card { display: flex; align-items: center; gap: 13px; padding: 15px 16px 15px 18px; }
+.water-icon {
+  width: 40px; height: 40px; border-radius: 50%; flex-shrink: 0;
+  background: #E9F2FC; color: var(--water);
+  display: grid; place-items: center;
+  transition: transform .3s var(--spring), background .3s;
+}
+.water-icon svg { width: 20px; height: 20px; }
+.water-icon.pop { animation: water-pop .4s var(--spring); }
+@keyframes water-pop { 40% { transform: scale(1.18); } }
+.water-card.done .water-icon { background: var(--water); color: #fff; }
+.water-info { flex: 1; min-width: 0; }
+.water-top { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 7px; }
+.water-title { font-size: 14.5px; font-weight: 700; }
+.water-val { font-size: 13px; font-weight: 600; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.water-card.done .water-val { color: var(--water); }
+.water-bar { height: 8px; border-radius: 5px; background: #EEF2F6; overflow: hidden; }
+.water-fill {
+  height: 100%; border-radius: 5px; width: 0%;
+  background: linear-gradient(90deg, #53A9EE, var(--water));
+  transition: width .55s var(--ease-out);
+}
+.water-btns { display: flex; gap: 8px; flex-shrink: 0; }
+.water-btns button {
+  width: 38px; height: 38px; border-radius: 50%;
+  font-size: 21px; font-weight: 600; line-height: 1;
+  background: #ECECEA; color: var(--ink);
+  transition: transform .15s var(--spring);
+}
+.water-btns #water-plus { background: #E9F2FC; color: var(--water); }
+.water-btns button:active { transform: scale(.88); }
+
 /* ═══════════ meals list ═══════════ */
 .meal-row {
   display: flex; align-items: center; gap: 13px;
@@ -322,6 +356,8 @@ button { font-family: inherit; border: 0; background: none; color: inherit; curs
 .day-title { font-size: 15.5px; font-weight: 700; flex: 1; }
 .day-flame { color: var(--c); width: 16px; height: 16px; }
 .day-kcal { font-size: 14px; font-weight: 600; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.day-water { display: inline-flex; align-items: center; gap: 3px; font-size: 12.5px; font-weight: 700; color: var(--water); font-variant-numeric: tabular-nums; }
+.day-water svg { width: 12px; height: 12px; }
 .day-chip { font-size: 11px; font-weight: 800; padding: 3px 8px; border-radius: 8px; }
 .day-chip.under { background: #E8F6EC; color: #1F7A3D; }
 .day-chip.over { background: #FDECEE; color: var(--over); }

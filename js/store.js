@@ -10,6 +10,7 @@ const Store = {
     try { this.profile = JSON.parse(localStorage.getItem("bite.profile") || "null"); } catch { this.profile = null; }
     try { this.days = JSON.parse(localStorage.getItem("bite.days") || "{}"); } catch { this.days = {}; }
     try { this.flags = JSON.parse(localStorage.getItem("bite.flags") || "{}"); } catch { this.flags = {}; }
+    if (this.profile && this.profile.waterGoal == null) this.profile.waterGoal = 2.5; // migrate older profiles
     this.pruneThumbs();
   },
 
@@ -41,7 +42,7 @@ const Store = {
   },
 
   day(k) {
-    if (!this.days[k]) this.days[k] = { ex: false, entries: [] };
+    if (!this.days[k]) this.days[k] = { ex: false, entries: [], water: 0 };
     return this.days[k];
   },
 

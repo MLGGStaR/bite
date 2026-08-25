@@ -145,6 +145,10 @@
         <input id="ob-bonus" type="number" inputmode="numeric" value="300" min="0" max="2000">
         <p class="field-hint">On days you mark as exercise days, your goal goes up by this much.</p>
       </div>
+      <div class="field">
+        <label for="ob-water">Daily water goal (litres)</label>
+        <input id="ob-water" type="number" inputmode="decimal" value="2.5" min="0.5" max="10" step="0.25">
+      </div>
       <div class="ob-actions"><button class="btn-primary" id="ob-finish">Finish setup</button></div>
     </section>
 
@@ -224,6 +228,20 @@
           <span class="macro-name">Fat</span>
           <div class="macro-bar"><div class="macro-fill" id="bar-f"></div></div>
           <span class="macro-val" id="val-f">0 g</span>
+        </div>
+      </div>
+
+      <div class="card water-card">
+        <span class="water-icon" id="water-icon">
+          <svg viewBox="0 0 24 24"><path d="M12 2.7S6 9.6 6 14a6 6 0 0 0 12 0c0-4.4-6-11.3-6-11.3z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/></svg>
+        </span>
+        <div class="water-info">
+          <div class="water-top"><span class="water-title">Water</span><span class="water-val" id="water-val">0 / 2.5 L</span></div>
+          <div class="water-bar"><div class="water-fill" id="water-fill"></div></div>
+        </div>
+        <div class="water-btns">
+          <button id="water-minus" aria-label="Remove a glass of water">−</button>
+          <button id="water-plus" aria-label="Add a glass of water">+</button>
         </div>
       </div>
 
@@ -436,18 +454,7 @@
       <div class="set-row"><label for="set-c">Carbs g</label><input id="set-c" type="number" inputmode="numeric" placeholder="off"></div>
       <div class="set-row"><label for="set-f">Fat g</label><input id="set-f" type="number" inputmode="numeric" placeholder="off"></div>
       <div class="set-row"><label for="set-bonus">Exercise boost</label><input id="set-bonus" type="number" inputmode="numeric"></div>
-    </div>
-
-    <p class="group-label">Claude</p>
-    <div class="group">
-      <div class="set-row col">
-        <label>Model for meal photos</label>
-        <div class="segmented" id="set-model">
-          <button data-val="best">Smartest</button><button data-val="balanced">Balanced</button><button data-val="fast">Fast</button>
-        </div>
-        <p class="field-hint" id="model-hint"></p>
-      </div>
-      <div class="set-row"><label>Connection</label><button class="link-btn" id="set-key-test">Test</button></div>
+      <div class="set-row"><label for="set-water">Water goal (L)</label><input id="set-water" type="number" inputmode="decimal" step="0.25"></div>
     </div>
 
     <p class="group-label">App</p>

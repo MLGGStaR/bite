@@ -7,23 +7,10 @@ const AI = {
   _seed: "QUFnM2kyNkctdzNtZjRSLWVwbVVrYklqeHdBa0dCdm9oeGdjZURNZUVsLUlld29kY2dpQzRLQ0cwM28xOXRFRk1EdF9YdnlabVl4V1lZTVVqNnllTjNLZ0NzU2YybU0tMzBpcGEtdG5hLWtz",
   seedKey() { try { return atob(this._seed).split("").reverse().join(""); } catch { return ""; } },
 
-  MODELS: {
-    best:     "claude-fable-5",
-    balanced: "claude-sonnet-5",
-    fast:     "claude-haiku-4-5",
-  },
-  SCAN_MODEL: "claude-haiku-4-5",
+  MEAL_MODEL: "claude-fable-5",   // always the smartest model for meal photos
+  SCAN_MODEL: "claude-haiku-4-5", // fastest model for the 2-second live scan loop
 
-  MODEL_HINTS: {
-    best:     "Claude Fable 5 — the smartest model. Best estimates, ~a cent or two per photo.",
-    balanced: "Claude Sonnet 5 — near-top quality, faster and cheaper.",
-    fast:     "Claude Haiku 4.5 — quickest and cheapest, good for simple plates.",
-  },
-
-  mealModel() {
-    const pick = Store.profile?.model || "best";
-    return this.MODELS[pick] || this.MODELS.best;
-  },
+  mealModel() { return this.MEAL_MODEL; },
 
   /* ---------- schemas (structured outputs) ---------- */
 
@@ -196,29 +183,6 @@ const AI = {
       maxTokens: 1200,
       timeoutMs: 30000,
     });
-  },
-
-  async testKey(key) {
-    const resp = await fetch(this.API, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-api-key": key,
-        "anthropic-version": "2023-06-01",
-        "anthropic-dangerous-direct-browser-access": "true",
-      },
-      body: JSON.stringify({
-        model: this.MODELS.fast,
-        max_tokens: 8,
-        messages: [{ role: "user", content: "Reply with OK" }],
-      }),
-    });
-    if (resp.status === 401) throw new AIError("auth", "That key was rejected — double-check it.");
-    if (!resp.ok) {
-      let msg = ""; try { msg = (await resp.json()).error?.message || ""; } catch {}
-      throw new AIError("api", msg || `Couldn't verify (${resp.status}).`);
-    }
-    return true;
   },
 
   /* ---------- image helpers ---------- */
