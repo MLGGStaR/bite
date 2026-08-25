@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Bite</title>
+<meta name="description" content="Point. Shoot. Tracked. AI calorie tracking with Claude.">
+<meta name="theme-color" content="#F6F6F4">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Bite">
+<link rel="preconnect" href="https://api.anthropic.com" crossorigin>
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+
+<!-- ══════════════ ONBOARDING ══════════════ -->
+<div id="onboarding" class="screen hidden">
+  <div class="ob-top">
+    <button id="ob-back" class="icon-btn hidden" aria-label="Back">
+      <svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+    <div id="ob-dots" class="ob-dots"></div>
+    <div class="ob-top-spacer"></div>
+  </div>
+
+  <div class="ob-track" id="ob-track">
+
+    <!-- 0 · Welcome -->
+    <section class="ob-step" data-step="0">
+      <div class="ob-hero">
+        <svg class="logo-ring" viewBox="0 0 120 120" aria-hidden="true">
+          <defs>
+            <linearGradient id="logoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#FFA51F"/><stop offset="100%" stop-color="#FF3B5C"/>
+            </linearGradient>
+          </defs>
+          <circle class="logo-arc" cx="60" cy="60" r="46" fill="none" stroke="url(#logoGrad)" stroke-width="13" stroke-linecap="round"
+                  transform="rotate(-155 60 60)"/>
+        </svg>
+        <h1 class="ob-wordmark">Bite</h1>
+        <p class="ob-tagline">Point. Shoot. Tracked.</p>
+        <p class="ob-sub">Snap a photo of any meal and Claude estimates the calories, protein, carbs and fat. Scan nutrition labels live. Hit your goal.</p>
+      </div>
+      <div class="ob-actions">
+        <p id="install-hint" class="install-hint hidden">Tip: install Bite first so your data sticks — tap <strong>Share</strong> → <strong>Add to Home Screen</strong>, then open it from your home screen.</p>
+        <button class="btn-primary" data-next>Get started</button>
+      </div>
+    </section>
+
+    <!-- 1 · About you -->
+    <section class="ob-step" data-step="1">
+      <h2 class="ob-title">About you</h2>
+      <p class="ob-caption">Used to estimate your daily burn. Stays on this phone.</p>
+      <div class="field">
+        <label for="ob-name">First name</label>
+        <input id="ob-name" type="text" autocomplete="given-name" placeholder="Alex" maxlength="20">
+      </div>
+      <div class="field">
+        <label>Sex</label>
+        <div class="segmented" id="ob-sex">
+          <button data-val="f">Female</button><button data-val="m">Male</button><button data-val="o">Other</button>
+        </div>
+      </div>
+      <div class="field">
+        <label for="ob-age">Age</label>
+        <input id="ob-age" type="number" inputmode="numeric" placeholder="28" min="13" max="110">
+      </div>
+      <div class="ob-actions"><button class="btn-primary" data-next disabled>Continue</button></div>
+    </section>
+
+    <!-- 2 · Body -->
+    <section class="ob-step" data-step="2">
+      <h2 class="ob-title">Your body</h2>
+      <p class="ob-caption">Height and weight sharpen the estimate.</p>
+      <div class="field">
+        <label>Units</label>
+        <div class="segmented" id="ob-units">
+          <button data-val="us">ft · lb</button><button data-val="metric">cm · kg</button>
+        </div>
+      </div>
+      <div class="field" id="height-us">
+        <label>Height</label>
+        <div class="row-2">
+          <select id="ob-ft" aria-label="Feet"></select>
+          <select id="ob-in" aria-label="Inches"></select>
+        </div>
+      </div>
+      <div class="field hidden" id="height-metric">
+        <label for="ob-cm">Height (cm)</label>
+        <input id="ob-cm" type="number" inputmode="decimal" placeholder="170" min="90" max="250">
+      </div>
+      <div class="field">
+        <label for="ob-weight">Weight <span id="ob-weight-unit">(lb)</span></label>
+        <input id="ob-weight" type="number" inputmode="decimal" placeholder="160" min="50" max="700">
+      </div>
+      <div class="ob-actions"><button class="btn-primary" data-next disabled>Continue</button></div>
+    </section>
+
+    <!-- 3 · Goal -->
+    <section class="ob-step" data-step="3">
+      <h2 class="ob-title">Daily calorie goal</h2>
+      <p class="ob-caption">How active are you on a normal day?</p>
+      <div class="field">
+        <div class="segmented seg-4" id="ob-activity">
+          <button data-val="1.2">Desk</button><button data-val="1.375">Light</button><button data-val="1.55">Active</button><button data-val="1.725">Athlete</button>
+        </div>
+      </div>
+      <p class="maintenance-line">Your maintenance is about <strong id="ob-maint">—</strong> kcal/day</p>
+      <div class="chip-row" id="ob-goal-chips">
+        <button data-delta="-500">Lose <span>−500</span></button>
+        <button data-delta="0">Maintain</button>
+        <button data-delta="300">Gain <span>+300</span></button>
+      </div>
+      <div class="field">
+        <label for="ob-goal">Daily goal (kcal)</label>
+        <input id="ob-goal" type="number" inputmode="numeric" placeholder="2000" min="800" max="8000">
+      </div>
+      <div class="ob-actions"><button class="btn-primary" data-next disabled>Continue</button></div>
+    </section>
+
+    <!-- 4 · Macros + exercise -->
+    <section class="ob-step" data-step="4">
+      <h2 class="ob-title">Fine-tuning</h2>
+      <p class="ob-caption">Both optional — you can change them anytime.</p>
+      <button class="reveal-toggle" id="ob-macro-toggle" aria-expanded="false">
+        <span>Set macro goals</span>
+        <svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <div class="macro-fields hidden" id="ob-macro-fields">
+        <div class="row-3">
+          <div class="field"><label for="ob-p">Protein g</label><input id="ob-p" type="number" inputmode="numeric" placeholder="140"></div>
+          <div class="field"><label for="ob-c">Carbs g</label><input id="ob-c" type="number" inputmode="numeric" placeholder="220"></div>
+          <div class="field"><label for="ob-f">Fat g</label><input id="ob-f" type="number" inputmode="numeric" placeholder="65"></div>
+        </div>
+        <button class="link-btn" id="ob-macro-suggest">Suggest for me</button>
+      </div>
+      <div class="divider"></div>
+      <div class="field">
+        <label for="ob-bonus">Exercise-day boost (kcal)</label>
+        <input id="ob-bonus" type="number" inputmode="numeric" value="300" min="0" max="2000">
+        <p class="field-hint">On days you mark as exercise days, your goal goes up by this much.</p>
+      </div>
+      <div class="ob-actions"><button class="btn-primary" data-next>Continue</button></div>
+    </section>
+
+    <!-- 5 · Connect Claude -->
+    <section class="ob-step" data-step="5">
+      <h2 class="ob-title">Connect Claude</h2>
+      <p class="ob-caption">Bite talks to Claude directly from your phone. Paste your API key — it's stored only on this device, never in the app's code.</p>
+      <div class="field">
+        <label for="ob-key">Claude API key</label>
+        <div class="key-wrap">
+          <input id="ob-key" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="sk-ant-…">
+          <button class="eye-btn" id="ob-key-eye" aria-label="Show key">
+            <svg viewBox="0 0 24 24"><path d="M2 12s3.5-6.5 10-6.5S22 12 22 12s-3.5 6.5-10 6.5S2 12 2 12z" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="2.8" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>
+          </button>
+        </div>
+        <p class="field-hint">Get one at console.anthropic.com → API keys.</p>
+      </div>
+      <div class="ob-actions">
+        <button class="btn-primary" id="ob-finish" disabled>Verify &amp; finish</button>
+      </div>
+    </section>
+
+  </div>
+</div>
+
+<!-- ══════════════ APP ══════════════ -->
+<div id="app" class="screen hidden">
+
+  <header class="app-header">
+    <div>
+      <p class="header-eyebrow" id="header-date"></p>
+      <h1 class="header-title" id="header-title">Today</h1>
+    </div>
+    <button class="icon-btn" id="btn-settings" aria-label="Settings">
+      <svg viewBox="0 0 24 24"><path d="M12 8.6a3.4 3.4 0 1 0 0 6.8 3.4 3.4 0 0 0 0-6.8zm8.9 3.4c0 .5 0 .9-.1 1.4l2 1.6-2 3.4-2.4-.9c-.7.6-1.5 1-2.4 1.4l-.4 2.6h-4l-.4-2.6c-.9-.3-1.7-.8-2.4-1.4l-2.4.9-2-3.4 2-1.6a8 8 0 0 1 0-2.8l-2-1.6 2-3.4 2.4.9c.7-.6 1.5-1 2.4-1.4L10 2.5h4l.4 2.6c.9.3 1.7.8 2.4 1.4l2.4-.9 2 3.4-2 1.6c.1.5.1.9.1 1.4z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>
+    </button>
+  </header>
+
+  <main class="views">
+
+    <!-- TODAY -->
+    <section id="view-today" class="view">
+      <div id="install-banner" class="install-banner hidden">
+        <div>
+          <strong>Install Bite</strong>
+          <span>Share → Add to Home Screen</span>
+        </div>
+        <button id="install-banner-x" class="icon-btn small" aria-label="Dismiss">
+          <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+
+      <div class="card ring-card">
+        <div class="ring-wrap">
+          <svg id="ring" viewBox="0 0 220 220">
+            <defs>
+              <linearGradient id="ringGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#FFA51F"/><stop offset="100%" stop-color="#FF3B5C"/>
+              </linearGradient>
+              <linearGradient id="overGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#FF3B5C"/><stop offset="100%" stop-color="#C81E3E"/>
+              </linearGradient>
+            </defs>
+            <circle class="ring-track" cx="110" cy="110" r="94"/>
+            <circle id="ring-fill" class="ring-fill" cx="110" cy="110" r="94" transform="rotate(-90 110 110)"/>
+            <circle id="ring-over" class="ring-over" cx="110" cy="110" r="94" transform="rotate(-90 110 110)"/>
+          </svg>
+          <div class="ring-center">
+            <p class="ring-big" id="ring-num">0</p>
+            <p class="ring-label" id="ring-label">kcal left</p>
+          </div>
+        </div>
+        <p class="ring-sub"><span id="ring-eaten">0</span> eaten · goal <span id="ring-goal">0</span></p>
+        <button class="ex-pill" id="ex-toggle" aria-pressed="false">
+          <span class="ex-flame">
+            <svg viewBox="0 0 24 24"><path d="M12 2s1 3.2-1.5 6C8.2 10.5 7 12.3 7 14.5a5 5 0 0 0 10 0c0-1.6-.6-2.9-1.4-4-.3 1-.9 1.9-1.8 2.4.4-2.5-.3-5.8-1.8-7.9z" fill="currentColor"/></svg>
+          </span>
+          <span class="ex-text">Exercise day</span>
+          <span class="ex-bonus" id="ex-bonus-label">+300</span>
+          <span class="switch"><span class="knob"></span></span>
+        </button>
+      </div>
+
+      <div class="card macros-card" id="macros-card">
+        <div class="macro-row" data-m="p">
+          <span class="macro-name">Protein</span>
+          <div class="macro-bar"><div class="macro-fill" id="bar-p"></div></div>
+          <span class="macro-val" id="val-p">0 g</span>
+        </div>
+        <div class="macro-row" data-m="c">
+          <span class="macro-name">Carbs</span>
+          <div class="macro-bar"><div class="macro-fill" id="bar-c"></div></div>
+          <span class="macro-val" id="val-c">0 g</span>
+        </div>
+        <div class="macro-row" data-m="f">
+          <span class="macro-name">Fat</span>
+          <div class="macro-bar"><div class="macro-fill" id="bar-f"></div></div>
+          <span class="macro-val" id="val-f">0 g</span>
+        </div>
+      </div>
+
+      <div class="card meals-card">
+        <div class="card-head"><h3>Meals</h3><span class="meals-count" id="meals-count"></span></div>
+        <div id="meal-list"></div>
+        <div id="meals-empty" class="empty-state">
+          <svg viewBox="0 0 24 24"><path d="M4 7h3l1.5-2h7L17 7h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><circle cx="12" cy="13" r="3.4" fill="none" stroke="currentColor" stroke-width="1.7"/></svg>
+          <p>Nothing logged yet.<br>Snap your first bite.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- HISTORY -->
+    <section id="view-history" class="view hidden">
+      <div class="card chart-card">
+        <div class="card-head"><h3>Last 7 days</h3><span class="chart-avg" id="chart-avg"></span></div>
+        <div class="chart" id="week-chart"></div>
+      </div>
+      <div id="history-list"></div>
+      <div id="history-empty" class="empty-state tall hidden">
+        <p>Your past days will show up here.</p>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- TAB BAR -->
+  <nav class="tabbar">
+    <button class="tab active" data-view="today">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 8.4v3.6l2.6 1.6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      <span>Today</span>
+    </button>
+    <button class="tab-add" id="btn-add" aria-label="Add food">
+      <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" stroke="white" stroke-width="2.6" stroke-linecap="round"/></svg>
+    </button>
+    <button class="tab" data-view="history">
+      <svg viewBox="0 0 24 24"><path d="M5 19V11M12 19V5M19 19v-6" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
+      <span>History</span>
+    </button>
+  </nav>
+</div>
+
+<!-- ══════════════ SHEETS ══════════════ -->
+<div id="backdrop" class="backdrop hidden"></div>
+
+<!-- Add options -->
+<div id="sheet-add" class="sheet hidden" role="dialog" aria-label="Add food">
+  <div class="grabber"></div>
+  <h3 class="sheet-title">Add food</h3>
+  <div class="add-options">
+    <button class="add-opt" id="opt-photo">
+      <span class="add-opt-icon grad">
+        <svg viewBox="0 0 24 24"><path d="M4 7h3l1.5-2h7L17 7h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1z" fill="none" stroke="white" stroke-width="1.8" stroke-linejoin="round"/><circle cx="12" cy="13" r="3.2" fill="none" stroke="white" stroke-width="1.8"/></svg>
+      </span>
+      <span class="add-opt-text"><strong>Snap a meal</strong><span>Claude estimates the nutrition</span></span>
+    </button>
+    <button class="add-opt" id="opt-scan">
+      <span class="add-opt-icon dark">
+        <svg viewBox="0 0 24 24"><path d="M3 8V5a2 2 0 0 1 2-2h3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M8 21H5a2 2 0 0 1-2-2v-3" fill="none" stroke="white" stroke-width="2" stroke-linecap="round"/><path d="M7 12h10" stroke="white" stroke-width="2" stroke-linecap="round"/></svg>
+      </span>
+      <span class="add-opt-text"><strong>Scan a label</strong><span>Live-reads Nutrition Facts</span></span>
+    </button>
+    <button class="add-opt" id="opt-manual">
+      <span class="add-opt-icon plain">
+        <svg viewBox="0 0 24 24"><path d="M4 20h4l11-11-4-4L4 16v4z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+      </span>
+      <span class="add-opt-text"><strong>Add manually</strong><span>Type it in yourself</span></span>
+    </button>
+  </div>
+</div>
+<input type="file" id="photo-input" accept="image/*" capture="environment" hidden>
+
+<!-- Photo analyze -->
+<div id="sheet-photo" class="sheet hidden" role="dialog" aria-label="Analyze meal">
+  <div class="grabber"></div>
+  <div id="photo-stage-preview">
+    <img id="photo-preview" alt="Your meal photo">
+    <div class="field">
+      <label for="photo-note">Add a note <span class="opt">(optional)</span></label>
+      <input id="photo-note" type="text" placeholder="e.g. large bowl, cooked in olive oil" maxlength="140">
+    </div>
+    <button class="btn-primary" id="btn-analyze">Analyze with Claude</button>
+  </div>
+  <div id="photo-stage-loading" class="hidden">
+    <div class="analyze-anim">
+      <img id="photo-loading-thumb" alt="">
+      <div class="analyze-sweep"></div>
+    </div>
+    <p class="analyze-status" id="analyze-status">Looking at your plate…</p>
+  </div>
+  <div id="photo-stage-result" class="hidden">
+    <div class="result-head">
+      <h3 id="result-title">Meal</h3>
+      <span class="conf-chip" id="result-conf">high</span>
+    </div>
+    <div id="result-items"></div>
+    <p class="result-note" id="result-note"></p>
+    <div class="result-total">
+      <div><strong id="result-kcal">0</strong><span>kcal</span></div>
+      <div class="result-macros" id="result-macros"></div>
+    </div>
+    <div class="row-2">
+      <button class="btn-secondary" id="btn-retake">Retake</button>
+      <button class="btn-primary" id="btn-log-meal">Log meal</button>
+    </div>
+  </div>
+</div>
+
+<!-- Live label scan -->
+<div id="sheet-scan" class="scan-screen hidden" role="dialog" aria-label="Scan nutrition label">
+  <video id="scan-video" playsinline muted autoplay></video>
+  <div class="scan-shade"></div>
+  <div class="scan-frame">
+    <span class="c tl"></span><span class="c tr"></span><span class="c bl"></span><span class="c br"></span>
+    <div class="scan-line"></div>
+  </div>
+  <div class="scan-top">
+    <button class="scan-close" id="scan-close" aria-label="Close">
+      <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" stroke="white" stroke-width="2.4" stroke-linecap="round"/></svg>
+    </button>
+    <button class="scan-torch hidden" id="scan-torch" aria-label="Flashlight">
+      <svg viewBox="0 0 24 24"><path d="M9 2h6v3l-1.5 3v12a1.5 1.5 0 0 1-3 0V8L9 5V2z" fill="none" stroke="white" stroke-width="1.8" stroke-linejoin="round"/></svg>
+    </button>
+  </div>
+  <p class="scan-status" id="scan-status">Point at a Nutrition Facts label</p>
+  <div class="scan-card hidden" id="scan-result">
+    <h3 id="scan-name">Product</h3>
+    <p class="scan-serving" id="scan-serving"></p>
+    <div class="stepper">
+      <button id="serv-minus" aria-label="Fewer servings">−</button>
+      <div class="stepper-val"><strong id="serv-count">1</strong><span>serving</span></div>
+      <button id="serv-plus" aria-label="More servings">+</button>
+    </div>
+    <div class="result-total">
+      <div><strong id="scan-kcal">0</strong><span>kcal</span></div>
+      <div class="result-macros" id="scan-macros"></div>
+    </div>
+    <div class="row-2">
+      <button class="btn-secondary" id="scan-again">Rescan</button>
+      <button class="btn-primary" id="scan-log">Log it</button>
+    </div>
+  </div>
+</div>
+
+<!-- Manual add -->
+<div id="sheet-manual" class="sheet hidden" role="dialog" aria-label="Add manually">
+  <div class="grabber"></div>
+  <h3 class="sheet-title">Add manually</h3>
+  <div class="field"><label for="man-name">Name</label><input id="man-name" type="text" placeholder="Protein shake" maxlength="60"></div>
+  <div class="field"><label for="man-kcal">Calories</label><input id="man-kcal" type="number" inputmode="numeric" placeholder="220"></div>
+  <div class="row-3">
+    <div class="field"><label for="man-p">Protein g</label><input id="man-p" type="number" inputmode="decimal" placeholder="0"></div>
+    <div class="field"><label for="man-c">Carbs g</label><input id="man-c" type="number" inputmode="decimal" placeholder="0"></div>
+    <div class="field"><label for="man-f">Fat g</label><input id="man-f" type="number" inputmode="decimal" placeholder="0"></div>
+  </div>
+  <button class="btn-primary" id="man-log" disabled>Log it</button>
+</div>
+
+<!-- Entry detail -->
+<div id="sheet-entry" class="sheet hidden" role="dialog" aria-label="Edit entry">
+  <div class="grabber"></div>
+  <div class="entry-head">
+    <div class="entry-thumb" id="entry-thumb"></div>
+    <div>
+      <input id="entry-name" class="entry-name-input" type="text" maxlength="60" aria-label="Meal name">
+      <p class="entry-time" id="entry-time"></p>
+    </div>
+  </div>
+  <div class="field"><label for="entry-kcal">Calories</label><input id="entry-kcal" type="number" inputmode="numeric"></div>
+  <div class="row-3">
+    <div class="field"><label for="entry-p">Protein g</label><input id="entry-p" type="number" inputmode="decimal"></div>
+    <div class="field"><label for="entry-c">Carbs g</label><input id="entry-c" type="number" inputmode="decimal"></div>
+    <div class="field"><label for="entry-f">Fat g</label><input id="entry-f" type="number" inputmode="decimal"></div>
+  </div>
+  <div class="row-2">
+    <button class="btn-danger" id="entry-delete">Delete</button>
+    <button class="btn-primary" id="entry-save">Save</button>
+  </div>
+</div>
+
+<!-- Settings -->
+<div id="sheet-settings" class="sheet tall hidden" role="dialog" aria-label="Settings">
+  <div class="grabber"></div>
+  <h3 class="sheet-title">Settings</h3>
+  <div class="settings-scroll">
+
+    <p class="group-label">Profile</p>
+    <div class="group">
+      <div class="set-row"><label for="set-name">Name</label><input id="set-name" type="text" maxlength="20"></div>
+      <div class="set-row"><label>Sex</label>
+        <div class="segmented mini" id="set-sex"><button data-val="f">F</button><button data-val="m">M</button><button data-val="o">—</button></div>
+      </div>
+      <div class="set-row"><label for="set-age">Age</label><input id="set-age" type="number" inputmode="numeric"></div>
+      <div class="set-row"><label for="set-height">Height <span class="unit-echo" data-u="height"></span></label><input id="set-height" type="number" inputmode="decimal"></div>
+      <div class="set-row"><label for="set-weight">Weight <span class="unit-echo" data-u="weight"></span></label><input id="set-weight" type="number" inputmode="decimal"></div>
+      <div class="set-row"><label>Units</label>
+        <div class="segmented mini" id="set-units"><button data-val="us">US</button><button data-val="metric">Metric</button></div>
+      </div>
+    </div>
+
+    <p class="group-label">Goals</p>
+    <div class="group">
+      <div class="set-row"><label for="set-goal">Daily kcal</label><input id="set-goal" type="number" inputmode="numeric"></div>
+      <div class="set-row"><label for="set-p">Protein g</label><input id="set-p" type="number" inputmode="numeric" placeholder="off"></div>
+      <div class="set-row"><label for="set-c">Carbs g</label><input id="set-c" type="number" inputmode="numeric" placeholder="off"></div>
+      <div class="set-row"><label for="set-f">Fat g</label><input id="set-f" type="number" inputmode="numeric" placeholder="off"></div>
+      <div class="set-row"><label for="set-bonus">Exercise boost</label><input id="set-bonus" type="number" inputmode="numeric"></div>
+    </div>
+
+    <p class="group-label">Claude</p>
+    <div class="group">
+      <div class="set-row col">
+        <label>Model for meal photos</label>
+        <div class="segmented" id="set-model">
+          <button data-val="best">Smartest</button><button data-val="balanced">Balanced</button><button data-val="fast">Fast</button>
+        </div>
+        <p class="field-hint" id="model-hint"></p>
+      </div>
+      <div class="set-row"><label>API key</label><button class="link-btn" id="set-key-btn">••••••••</button></div>
+      <div class="set-row"><label>Connection</label><button class="link-btn" id="set-key-test">Test</button></div>
+    </div>
+
+    <p class="group-label">App</p>
+    <div class="group">
+      <div class="set-row"><label>Version</label><span class="set-static">1.0</span></div>
+      <div class="set-row"><label>Reset everything</label><button class="link-btn danger" id="set-reset">Reset…</button></div>
+    </div>
+    <p class="settings-foot">Bite · your data lives only on this device</p>
+  </div>
+</div>
+
+<!-- Confirm dialog -->
+<div id="sheet-confirm" class="sheet hidden" role="alertdialog" aria-label="Confirm">
+  <div class="grabber"></div>
+  <h3 class="sheet-title" id="confirm-title">Are you sure?</h3>
+  <p class="confirm-body" id="confirm-body"></p>
+  <div class="row-2">
+    <button class="btn-secondary" id="confirm-no">Cancel</button>
+    <button class="btn-danger" id="confirm-yes">Delete</button>
+  </div>
+</div>
+
+<div id="toast-wrap"></div>
+
+<script src="js/store.js"></script>
+<script src="js/ai.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
