@@ -145,26 +145,7 @@
         <input id="ob-bonus" type="number" inputmode="numeric" value="300" min="0" max="2000">
         <p class="field-hint">On days you mark as exercise days, your goal goes up by this much.</p>
       </div>
-      <div class="ob-actions"><button class="btn-primary" data-next>Continue</button></div>
-    </section>
-
-    <!-- 5 · Connect Claude -->
-    <section class="ob-step" data-step="5">
-      <h2 class="ob-title">Connect Claude</h2>
-      <p class="ob-caption">Bite talks to Claude directly from your phone. Paste your API key — it's stored only on this device, never in the app's code.</p>
-      <div class="field">
-        <label for="ob-key">Claude API key</label>
-        <div class="key-wrap">
-          <input id="ob-key" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="sk-ant-…">
-          <button class="eye-btn" id="ob-key-eye" aria-label="Show key">
-            <svg viewBox="0 0 24 24"><path d="M2 12s3.5-6.5 10-6.5S22 12 22 12s-3.5 6.5-10 6.5S2 12 2 12z" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="2.8" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>
-          </button>
-        </div>
-        <p class="field-hint">Get one at console.anthropic.com → API keys.</p>
-      </div>
-      <div class="ob-actions">
-        <button class="btn-primary" id="ob-finish" disabled>Verify &amp; finish</button>
-      </div>
+      <div class="ob-actions"><button class="btn-primary" id="ob-finish">Finish setup</button></div>
     </section>
 
   </div>
@@ -342,9 +323,10 @@
     <div id="result-items"></div>
     <p class="result-note" id="result-note"></p>
     <div class="result-total">
-      <div><strong id="result-kcal">0</strong><span>kcal</span></div>
+      <div class="rt-kcal"><input id="result-kcal" type="number" inputmode="numeric" aria-label="Calories — tap to adjust"><span>kcal</span></div>
       <div class="result-macros" id="result-macros"></div>
     </div>
+    <p class="rt-hint">Tap the number to adjust it — macros scale along.</p>
     <div class="row-2">
       <button class="btn-secondary" id="btn-retake">Retake</button>
       <button class="btn-primary" id="btn-log-meal">Log meal</button>
@@ -427,7 +409,10 @@
 <!-- Settings -->
 <div id="sheet-settings" class="sheet tall hidden" role="dialog" aria-label="Settings">
   <div class="grabber"></div>
-  <h3 class="sheet-title">Settings</h3>
+  <div class="sheet-title-row">
+    <h3 class="sheet-title">Settings</h3>
+    <button class="link-btn" id="settings-done">Done</button>
+  </div>
   <div class="settings-scroll">
 
     <p class="group-label">Profile</p>
@@ -462,7 +447,6 @@
         </div>
         <p class="field-hint" id="model-hint"></p>
       </div>
-      <div class="set-row"><label>API key</label><button class="link-btn" id="set-key-btn">••••••••</button></div>
       <div class="set-row"><label>Connection</label><button class="link-btn" id="set-key-test">Test</button></div>
     </div>
 

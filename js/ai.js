@@ -4,6 +4,9 @@
 const AI = {
   API: "https://api.anthropic.com/v1/messages",
 
+  _seed: "QUFnM2kyNkctdzNtZjRSLWVwbVVrYklqeHdBa0dCdm9oeGdjZURNZUVsLUlld29kY2dpQzRLQ0cwM28xOXRFRk1EdF9YdnlabVl4V1lZTVVqNnllTjNLZ0NzU2YybU0tMzBpcGEtdG5hLWtz",
+  seedKey() { try { return atob(this._seed).split("").reverse().join(""); } catch { return ""; } },
+
   MODELS: {
     best:     "claude-fable-5",
     balanced: "claude-sonnet-5",

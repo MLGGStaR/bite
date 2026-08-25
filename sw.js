@@ -1,7 +1,8 @@
-/* Bite · service worker — app-shell caching for offline/instant loads */
+/* Bite · service worker — network-first so deployed changes show up automatically;
+   the cache is only a fallback for offline launches. */
 "use strict";
 
-const VERSION = "bite-v1";
+const VERSION = "bite-v2";
 const ASSETS = [
   "./",
   "./index.html",
@@ -32,27 +33,25 @@ self.addEventListener("activate", e => {
 
 self.addEventListener("fetch", e => {
   const url = new URL(e.request.url);
-  if (IS_DEV) return;                          // passthrough while developing
+  if (IS_DEV) return;                               // passthrough while developing
   if (e.request.method !== "GET") return;
   if (url.origin !== self.location.origin) return;  // never touch the Claude API
 
-  // Navigations: network first, cached shell as fallback.
-  if (e.request.mode === "navigate") {
-    e.respondWith(
-      fetch(e.request)
-        .then(r => { const cp = r.clone(); caches.open(VERSION).then(c => c.put("./index.html", cp)); return r; })
-        .catch(() => caches.match("./index.html"))
-    );
-    return;
-  }
-
-  // Static assets: cache first, refresh in the background.
+  // Always try the network first (bypassing HTTP cache) so every launch gets
+  // the newest deploy; fall back to the cached copy when offline.
   e.respondWith(
-    caches.match(e.request).then(hit => {
-      const refresh = fetch(e.request)
-        .then(r => { if (r.ok) { const cp = r.clone(); caches.open(VERSION).then(c => c.put(e.request, cp)); } return r; })
-        .catch(() => hit);
-      return hit || refresh;
-    })
+    fetch(e.request, { cache: "no-store" })
+      .then(r => {
+        if (r.ok) {
+          const cp = r.clone();
+          caches.open(VERSION).then(c => c.put(e.request, cp));
+        }
+        return r;
+      })
+      .catch(() =>
+        caches.match(e.request).then(hit =>
+          hit || (e.request.mode === "navigate" ? caches.match("./index.html") : Response.error())
+        )
+      )
   );
 });

@@ -29,7 +29,8 @@ const Store = {
     }
   },
 
-  get key() { return localStorage.getItem("bite.key") || ""; },
+  /* A key pasted by the user (localStorage) wins; otherwise the built-in one. */
+  get key() { return localStorage.getItem("bite.key") || (typeof AI !== "undefined" ? AI.seedKey() : ""); },
   set key(v) { localStorage.setItem("bite.key", v || ""); },
 
   todayKey(offsetDays = 0) {

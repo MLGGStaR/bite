@@ -39,7 +39,12 @@ window.addEventListener("DOMContentLoaded", () => {
 
 function registerSW() {
   if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.register("sw.js").catch(() => {});
+    navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).then(reg => {
+      reg.update().catch(() => {});
+      document.addEventListener("visibilitychange", () => {
+        if (!document.hidden) reg.update().catch(() => {});
+      });
+    }).catch(() => {});
   }
 }
 
@@ -49,7 +54,7 @@ const IS_STANDALONE = navigator.standalone === true || matchMedia("(display-mode
 /* ═══════════════════ onboarding ═══════════════════ */
 
 const OB = { step: 0, name: "", sex: "", age: null, units: "us", ft: 5, in: 8, cm: null, weight: null, activity: 1.375, goal: null, p: null, c: null, f: null, bonus: 300 };
-const OB_STEPS = 6;
+const OB_STEPS = 5;
 
 function showOnboarding() {
   $("#onboarding").classList.remove("hidden");
@@ -105,12 +110,11 @@ function updateMaintenance() {
 }
 
 function validateStep() {
-  const btn = OB.step === 5 ? $("#ob-finish") : $(`.ob-step[data-step="${OB.step}"] [data-next]`);
+  const btn = OB.step === 4 ? $("#ob-finish") : $(`.ob-step[data-step="${OB.step}"] [data-next]`);
   let ok = true;
   if (OB.step === 1) ok = OB.name.trim().length > 0 && OB.sex && OB.age >= 13 && OB.age <= 110;
   if (OB.step === 2) ok = obWeightKg() > 20 && obHeightCm() > 80;
   if (OB.step === 3) ok = OB.goal >= 800 && OB.goal <= 8000;
-  if (OB.step === 5) ok = ($("#ob-key").value.trim().startsWith("sk-"));
   if (btn) btn.disabled = !ok;
 }
 
@@ -166,33 +170,17 @@ function wireOnboarding() {
   ["p", "c", "f"].forEach(k => $(`#ob-${k}`).addEventListener("input", e => { OB[k] = +e.target.value || null; }));
   $("#ob-bonus").addEventListener("input", e => { OB.bonus = +e.target.value || 0; });
 
-  $("#ob-key").addEventListener("input", validateStep);
-  $("#ob-key").addEventListener("change", validateStep);
-  $("#ob-key-eye").addEventListener("click", () => {
-    const i = $("#ob-key");
-    i.type = i.type === "password" ? "text" : "password";
-  });
-
-  $("#ob-finish").addEventListener("click", async () => {
-    const btn = $("#ob-finish"), key = $("#ob-key").value.trim();
-    btn.disabled = true; btn.textContent = "Checking…";
-    try {
-      await AI.testKey(key);
-      Store.key = key;
-      Store.profile = {
-        name: OB.name.trim(), sex: OB.sex, age: OB.age,
-        heightCm: Math.round(obHeightCm()), weightKg: Math.round(obWeightKg() * 10) / 10,
-        units: OB.units, activity: OB.activity,
-        goalKcal: OB.goal, macroP: OB.p, macroC: OB.c, macroF: OB.f,
-        bonus: OB.bonus, model: "best",
-      };
-      Store.saveProfile();
-      successPop();
-      setTimeout(() => enterApp(true), 950);
-    } catch (e) {
-      toast(e.message || "Couldn't verify the key.", "err");
-      btn.disabled = false; btn.textContent = "Verify & finish";
-    }
+  $("#ob-finish").addEventListener("click", () => {
+    Store.profile = {
+      name: OB.name.trim(), sex: OB.sex, age: OB.age,
+      heightCm: Math.round(obHeightCm()), weightKg: Math.round(obWeightKg() * 10) / 10,
+      units: OB.units, activity: OB.activity,
+      goalKcal: OB.goal, macroP: OB.p, macroC: OB.c, macroF: OB.f,
+      bonus: OB.bonus, model: "best",
+    };
+    Store.saveProfile();
+    successPop();
+    setTimeout(() => enterApp(true), 950);
   });
 
   ["ob-name", "ob-age", "ob-weight", "ob-cm", "ob-goal"].forEach(id =>
@@ -401,7 +389,7 @@ function showConfirm(title, body, yesLabel = "Delete") {
 
 /* ═══════════════════ photo flow ═══════════════════ */
 
-const PHOTO = { canvas: null, result: null, items: [] };
+const PHOTO = { canvas: null, result: null, items: [], override: null };
 const ANALYZE_LINES = [
   "Looking at your plate…",
   "Sizing up the portions…",
@@ -430,6 +418,11 @@ function wirePhotoFlow() {
   $("#btn-retake").addEventListener("click", () => { closeSheet(); setTimeout(() => $("#photo-input").click(), 250); });
   $("#btn-log-meal").addEventListener("click", logAnalyzedMeal);
   $("#photo-note").addEventListener("keydown", e => { if (e.key === "Enter") { e.target.blur(); analyzeMeal(); } });
+  $("#result-kcal").addEventListener("input", () => {
+    const v = Math.round(+$("#result-kcal").value || 0);
+    PHOTO.override = v > 0 ? v : null;
+    renderResultMacros();
+  });
 }
 
 function photoStage(name) {
@@ -492,10 +485,20 @@ function renderMealResult() {
     renderMealResult();
   }));
 
-  const tot = mealTotals();
-  $("#result-kcal").textContent = fmt(tot.kcal);
+  PHOTO.override = null;
+  $("#result-kcal").value = Math.round(mealTotals().kcal);
+  renderResultMacros();
+}
+
+function resultRatio() {
+  const est = mealTotals().kcal;
+  return PHOTO.override != null && est > 0 ? PHOTO.override / est : 1;
+}
+
+function renderResultMacros() {
+  const tot = mealTotals(), r = resultRatio();
   $("#result-macros").innerHTML =
-    `<span class="mp">P ${Math.round(tot.p)}g</span><span class="mc">C ${Math.round(tot.c)}g</span><span class="mf">F ${Math.round(tot.f)}g</span>`;
+    `<span class="mp">P ${Math.round(tot.p * r)}g</span><span class="mc">C ${Math.round(tot.c * r)}g</span><span class="mf">F ${Math.round(tot.f * r)}g</span>`;
 }
 
 function mealTotals() {
@@ -506,18 +509,19 @@ function mealTotals() {
 }
 
 function logAnalyzedMeal() {
-  const tot = mealTotals();
-  if (tot.kcal <= 0) { toast("Nothing left to log.", "err"); return; }
+  const tot = mealTotals(), r = resultRatio();
+  const kcal = PHOTO.override != null ? PHOTO.override : tot.kcal;
+  if (kcal <= 0) { toast("Nothing left to log.", "err"); return; }
   Store.addEntry(Store.todayKey(), {
     name: PHOTO.result.title || "Meal",
-    kcal: Math.round(tot.kcal), p: Math.round(tot.p), c: Math.round(tot.c), f: Math.round(tot.f),
+    kcal: Math.round(kcal), p: Math.round(tot.p * r), c: Math.round(tot.c * r), f: Math.round(tot.f * r),
     src: "photo",
     thumb: AI.thumbFrom(PHOTO.canvas),
     note: PHOTO.result.notes || "",
   });
   closeSheet();
   renderToday(false);
-  celebrateLog(tot.kcal);
+  celebrateLog(kcal);
 }
 
 function handleAIError(e) {
@@ -527,7 +531,7 @@ function handleAIError(e) {
 
 /* ═══════════════════ live label scan ═══════════════════ */
 
-const SCAN = { stream: null, on: false, busy: false, timer: null, found: null, servings: 1, statusTimer: null, statusIdx: 0 };
+const SCAN = { stream: null, on: false, busy: false, timer: null, found: null, thumb: null, servings: 1, statusTimer: null, statusIdx: 0 };
 const SCAN_LINES = ["Point at a Nutrition Facts label", "Hold steady", "Get the whole panel in frame"];
 
 function wireScan() {
@@ -565,7 +569,7 @@ async function startScan() {
     $("#scan-torch").classList.toggle("hidden", !caps.torch);
   } catch { $("#scan-torch").classList.add("hidden"); }
 
-  SCAN.on = true; SCAN.busy = false; SCAN.found = null;
+  SCAN.on = true; SCAN.busy = false; SCAN.found = null; SCAN.thumb = null;
   SCAN.statusIdx = 0;
   setScanStatus(SCAN_LINES[0], false);
   clearInterval(SCAN.statusTimer);
@@ -603,6 +607,7 @@ async function captureFrame() {
     const res = await AI.scanLabel(AI.canvasB64(cv, 0.8));
     if (!SCAN.on) return;
     if (res.found && res.calories > 0) {
+      SCAN.thumb = AI.thumbFrom(cv); // keep the frame that was read, as the entry's photo
       foundLabel(res);
       return;
     }
@@ -647,6 +652,7 @@ function renderScanTotals() {
 
 function resumeScan() {
   SCAN.found = null;
+  SCAN.thumb = null;
   $("#sheet-scan").classList.remove("found");
   $("#scan-result").classList.add("hidden");
   $("#scan-status").classList.remove("hidden");
@@ -662,6 +668,7 @@ function logScan() {
     kcal: Math.round(r.calories * s), p: Math.round(r.protein_g * s),
     c: Math.round(r.carbs_g * s), f: Math.round(r.fat_g * s),
     src: "scan",
+    thumb: SCAN.thumb || undefined,
   });
   stopScan();
   renderToday(false);
@@ -848,20 +855,7 @@ function wireSettings() {
   bind("#set-f", v => Store.profile.macroF = +v > 0 ? Math.round(+v) : null);
   bind("#set-bonus", v => Store.profile.bonus = Math.max(0, Math.round(+v || 0)));
 
-  $("#set-key-btn").addEventListener("click", () => {
-    const row = $("#set-key-btn").parentElement;
-    row.innerHTML = `<label>API key</label><input id="set-key-input" type="text" autocapitalize="off" spellcheck="false" placeholder="sk-ant-…">`;
-    const inp = $("#set-key-input");
-    inp.focus();
-    const commit = () => {
-      const v = inp.value.trim();
-      if (v.startsWith("sk-")) { Store.key = v; toast("Key updated", "ok"); }
-      row.innerHTML = `<label>API key</label><button class="link-btn" id="set-key-btn2">••••••••</button>`;
-      $("#set-key-btn2").addEventListener("click", () => location.reload());
-    };
-    inp.addEventListener("blur", commit);
-    inp.addEventListener("keydown", e => { if (e.key === "Enter") inp.blur(); });
-  });
+  $("#settings-done").addEventListener("click", closeSheet);
 
   $("#set-key-test").addEventListener("click", async () => {
     const btn = $("#set-key-test");

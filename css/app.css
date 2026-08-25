@@ -174,11 +174,6 @@ button { font-family: inherit; border: 0; background: none; color: inherit; curs
 .reveal-toggle[aria-expanded="true"] svg { transform: rotate(180deg); }
 .macro-fields { padding-top: 16px; }
 
-.key-wrap { position: relative; }
-.key-wrap input { padding-right: 50px; }
-.eye-btn { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); width: 40px; height: 40px; display: grid; place-items: center; color: var(--ink-3); }
-.eye-btn svg { width: 20px; height: 20px; }
-
 /* ═══════════ app chrome ═══════════ */
 .app-header {
   display: flex; align-items: flex-end; justify-content: space-between;
@@ -289,9 +284,9 @@ button { font-family: inherit; border: 0; background: none; color: inherit; curs
   box-shadow: inset 0 0 0 1px rgba(20,20,25,.05);
 }
 .meal-thumb svg { width: 21px; height: 21px; }
-.meal-info { flex: 1; min-width: 0; }
-.meal-name { font-size: 15.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.meal-meta { font-size: 12.5px; color: var(--ink-3); margin-top: 2px; font-variant-numeric: tabular-nums; }
+.meal-info { flex: 1; min-width: 0; overflow: hidden; }
+.meal-name { display: block; font-size: 15.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.meal-meta { display: block; font-size: 12.5px; color: var(--ink-3); margin-top: 2px; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .meal-kcal { text-align: right; flex-shrink: 0; }
 .meal-kcal strong { font-family: var(--font-round); font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .meal-kcal span { display: block; font-size: 11px; color: var(--ink-3); font-weight: 600; }
@@ -377,9 +372,17 @@ button { font-family: inherit; border: 0; background: none; color: inherit; curs
 }
 .sheet.show { transform: translateY(0); }
 .sheet.tall { height: 92dvh; }
-.grabber { width: 38px; height: 5px; border-radius: 3px; background: #DBDBD7; margin: 4px auto 14px; flex-shrink: 0; }
+.sheet:not(.tall) { overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.grabber {
+  width: 38px; height: 5px; border-radius: 3px; background: #DBDBD7;
+  margin: 4px auto 14px; flex-shrink: 0; position: relative;
+}
+.grabber::after { content: ""; position: absolute; inset: -14px -60px; }
 .sheet-title { font-family: var(--font-round); font-size: 22px; font-weight: 800; letter-spacing: -.4px; margin-bottom: 16px; }
-.settings-scroll { overflow-y: auto; -webkit-overflow-scrolling: touch; padding-bottom: 10px; flex: 1; }
+.sheet-title-row { display: flex; align-items: center; justify-content: space-between; }
+.sheet-title-row .sheet-title { margin-bottom: 0; }
+.sheet-title-row { margin-bottom: 16px; flex-shrink: 0; }
+.settings-scroll { overflow-y: auto; -webkit-overflow-scrolling: touch; padding-bottom: 10px; flex: 1; min-height: 0; }
 
 .add-options { display: flex; flex-direction: column; gap: 11px; padding-bottom: 6px; }
 .add-opt {
@@ -434,12 +437,19 @@ button { font-family: inherit; border: 0; background: none; color: inherit; curs
 .result-note { font-size: 13px; color: var(--ink-3); font-style: italic; margin: 10px 0 4px; line-height: 1.45; }
 .result-total {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 16px 2px 18px;
+  padding: 16px 2px 4px;
 }
-.result-total > div:first-child strong {
-  font-family: var(--font-round); font-size: 34px; font-weight: 800; letter-spacing: -1px; font-variant-numeric: tabular-nums;
+.rt-kcal { display: flex; align-items: baseline; }
+.rt-kcal input {
+  font-family: var(--font-round); font-size: 34px; font-weight: 800; letter-spacing: -1px;
+  font-variant-numeric: tabular-nums; color: var(--ink);
+  border: 0; background: transparent; outline: none; padding: 0;
+  width: 4.2ch; min-width: 3ch; max-width: 6ch;
+  border-bottom: 2px dashed #DBDBD7;
 }
-.result-total > div:first-child span { font-size: 13px; font-weight: 600; color: var(--ink-3); margin-left: 5px; }
+.rt-kcal input:focus { border-bottom-color: var(--accent); }
+.rt-kcal span { font-size: 13px; font-weight: 600; color: var(--ink-3); margin-left: 6px; }
+.rt-hint { font-size: 11.5px; color: var(--ink-3); margin: 0 2px 14px; }
 .result-macros { display: flex; gap: 12px; }
 .result-macros span { font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .result-macros .mp { color: var(--p); } .result-macros .mc { color: var(--c); } .result-macros .mf { color: var(--f); }

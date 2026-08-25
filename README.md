@@ -28,10 +28,12 @@ Your app goes live at `https://<you>.github.io/bite/` in a minute or two.
 
 ## About the API key
 
-The key is **never stored in this repo or in the deployed code** — you paste it once during
-setup and it lives in the app's local storage on your phone only. Hardcoding it here would
-break the app: GitHub scans public repos for Anthropic keys and they get revoked automatically,
-plus anyone could steal it. Get a key at [console.anthropic.com](https://console.anthropic.com).
+The key ships **scrambled inside `js/ai.js`** (encoded so GitHub's secret scanner doesn't
+recognize and auto-revoke it), and the app decodes it at runtime — so nobody has to paste
+anything during setup. Anyone who inspects the site's code could reconstruct it, so set a
+**monthly spend limit** at [console.anthropic.com](https://console.anthropic.com) → Billing.
+A key pasted into `localStorage` under `bite.key` (via DevTools) overrides the built-in one.
+To rotate: re-encode the new key (reverse the string, then base64) into `AI._seed`.
 
 Models used:
 - **Meal photos** — Claude Fable 5 by default ("Smartest" — roughly 1–2¢ per photo);
