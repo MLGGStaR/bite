@@ -2,7 +2,7 @@
    the cache is only a fallback for offline launches. */
 "use strict";
 
-const VERSION = "bite-v7";
+const VERSION = "bite-v8";
 const ASSETS = [
   "./",
   "./index.html",
@@ -23,6 +23,9 @@ self.addEventListener("install", e => {
   if (IS_DEV) { self.skipWaiting(); return; }
   e.waitUntil(caches.open(VERSION).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting()));
 });
+
+// Let the page ask a waiting worker to activate immediately.
+self.addEventListener("message", e => { if (e.data === "skipWaiting") self.skipWaiting(); });
 
 self.addEventListener("activate", e => {
   e.waitUntil(

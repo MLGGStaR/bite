@@ -43,14 +43,31 @@ window.addEventListener("DOMContentLoaded", () => {
 });
 
 function registerSW() {
-  if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).then(reg => {
-      reg.update().catch(() => {});
-      document.addEventListener("visibilitychange", () => {
-        if (!document.hidden) reg.update().catch(() => {});
+  if (!("serviceWorker" in navigator)) return;
+  // If a new service worker takes control while we're running, the freshly
+  // deployed assets are cached — reload once so the user sees them without
+  // having to force-quit. (Guarded so it only fires on a real update, not the
+  // first-ever install, and never loops.)
+  const hadController = !!navigator.serviceWorker.controller;
+  let reloaded = false;
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (reloaded || !hadController) return;
+    reloaded = true;
+    location.reload();
+  });
+  navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).then(reg => {
+    reg.update().catch(() => {});
+    if (reg.waiting && navigator.serviceWorker.controller) reg.waiting.postMessage("skipWaiting");
+    reg.addEventListener("updatefound", () => {
+      const nw = reg.installing;
+      if (nw) nw.addEventListener("statechange", () => {
+        if (nw.state === "installed" && navigator.serviceWorker.controller) nw.postMessage("skipWaiting");
       });
-    }).catch(() => {});
-  }
+    });
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) reg.update().catch(() => {});
+    });
+  }).catch(() => {});
 }
 
 const IS_IOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
