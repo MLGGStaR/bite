@@ -50,8 +50,9 @@ const AI = {
       protein_g: { type: "number" },
       carbs_g: { type: "number" },
       fat_g: { type: "number" },
+      barcode: { type: "string", description: "If a product barcode is visible and the digits printed under it are clearly legible, those digits (8-14 numbers, no spaces). Empty string otherwise. Report this even when no nutrition label is readable." },
     },
-    required: ["found", "product_name", "serving_size", "calories", "protein_g", "carbs_g", "fat_g"],
+    required: ["found", "product_name", "serving_size", "calories", "protein_g", "carbs_g", "fat_g", "barcode"],
   },
 
   MEAL_SYSTEM:
@@ -62,10 +63,17 @@ const AI = {
     "If the image shows no food or drink, set is_food to false and return an empty items array.",
 
   SCAN_SYSTEM:
-    "You read Nutrition Facts labels from live camera frames. " +
+    "You read Nutrition Facts labels and barcodes from live camera frames. " +
     "Set found to true ONLY when a nutrition label's numbers are clearly legible in this frame — never guess from a blurry, partial, tilted or absent label. " +
     "When found is true, copy the exact printed per-serving values; use 0 for any value not printed. " +
-    "When found is false, set every other field to empty string or 0.",
+    "Independently: if a product barcode is visible and the digits printed beneath it are clearly legible, transcribe them into the barcode field (digits only). " +
+    "When found is false, set the other nutrition fields to empty string or 0.",
+
+  DESCRIBE_SYSTEM:
+    "You are Bite's nutrition engine — an expert nutritionist estimating calories and macronutrients from a short text description of food. " +
+    "Assume typical preparation and realistic portion sizes unless quantities are given — account for cooking oil, butter, dressings and sauces. " +
+    "List each distinct food as its own item. Round calories to the nearest 5 and macros to the nearest gram. " +
+    "If the text does not describe food or drink, set is_food to false and return an empty items array.",
 
   /* ---------- core request ---------- */
 
@@ -169,6 +177,55 @@ const AI = {
       effort: "low",
       timeoutMs: 120000,
     });
+  },
+
+  async describeMeal(text) {
+    return this.request({
+      model: this.mealModel(),
+      system: this.DESCRIBE_SYSTEM,
+      content: [{ type: "text", text: `Estimate the nutrition for: "${text.trim()}"` }],
+      schema: this.MEAL_SCHEMA,
+      maxTokens: 5000,
+      effort: "low",
+      timeoutMs: 60000,
+    });
+  },
+
+  /* Free lookup on OpenFoodFacts — no API key, no cost. Bounded so a slow
+     response can't stall the scan loop. */
+  async lookupBarcode(code) {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 10000);
+    let resp;
+    try {
+      resp = await fetch(
+        `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(code)}?fields=product_name,brands,serving_size,nutriments`,
+        { headers: { "accept": "application/json" }, signal: ctrl.signal }
+      );
+    } catch { return null; }
+    finally { clearTimeout(t); }
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    const prod = data.product;
+    if (!prod || data.status === 0) return null;
+    const n = prod.nutriments || {};
+    const perServing = n["energy-kcal_serving"] != null;
+    const pick = suffix => {
+      const v = perServing ? n[suffix + "_serving"] : n[suffix + "_100g"];
+      return typeof v === "number" ? v : 0;
+    };
+    const kcal = perServing ? n["energy-kcal_serving"] : (n["energy-kcal_100g"] ?? 0);
+    if (!kcal) return null;
+    const name = [prod.brands ? prod.brands.split(",")[0].trim() : "", prod.product_name || ""].filter(Boolean).join(" ").trim();
+    return {
+      product_name: name || "Scanned product",
+      serving_size: perServing ? (prod.serving_size || "1 serving") : "",
+      calories: Math.round(kcal),
+      protein_g: Math.round(pick("proteins") * 10) / 10,
+      carbs_g: Math.round(pick("carbohydrates") * 10) / 10,
+      fat_g: Math.round(pick("fat") * 10) / 10,
+      per100: !perServing,
+    };
   },
 
   async scanLabel(b64) {

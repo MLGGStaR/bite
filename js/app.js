@@ -16,7 +16,9 @@ let currentDateKey = "";
 
 window.addEventListener("DOMContentLoaded", () => {
   Store.load();
+  Sync.load();
   registerSW();
+  wireAuthForms();
   buildHeightSelects();
   wireOnboarding();
   wireApp();
@@ -26,6 +28,7 @@ window.addEventListener("DOMContentLoaded", () => {
   wireManual();
   wireEntrySheet();
   wireSettings();
+  wireWeight();
 
   if (Store.profile) enterApp(false);
   else showOnboarding();
@@ -51,10 +54,150 @@ function registerSW() {
 const IS_IOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
 const IS_STANDALONE = navigator.standalone === true || matchMedia("(display-mode: standalone)").matches;
 
+/* ═══════════════════ cloud sync ═══════════════════ */
+
+const Sync = {
+  quiet: false, dirtyDays: new Set(), dirtyRoot: false, timer: null, busy: false,
+
+  load() {
+    try {
+      const d = JSON.parse(localStorage.getItem("bite.dirty") || "null");
+      if (d) { this.dirtyDays = new Set(d.days || []); this.dirtyRoot = !!d.root; }
+    } catch {}
+  },
+  persist() {
+    localStorage.setItem("bite.dirty", JSON.stringify({ days: [...this.dirtyDays], root: this.dirtyRoot }));
+  },
+  mark(kind, key) {
+    if (this.quiet) return;
+    if (kind === "day") this.dirtyDays.add(key); else this.dirtyRoot = true;
+    this.persist();
+    this.schedule();
+  },
+  markAll() {
+    for (const k of Object.keys(Store.days)) {
+      const d = Store.days[k];
+      if (d.entries?.length || d.water || d.ex) this.dirtyDays.add(k);
+    }
+    this.dirtyRoot = true;
+    this.persist();
+    this.schedule(300);
+  },
+  schedule(ms = 2500) {
+    clearTimeout(this.timer);
+    this.timer = setTimeout(() => this.flush(), ms);
+  },
+  async flush() {
+    if (this.busy || !window.Cloud?.user) return;
+    if (!this.dirtyRoot && this.dirtyDays.size === 0) return;
+    this.busy = true;
+    setAcctStatus("Syncing…");
+    try {
+      const days = {};
+      for (const k of this.dirtyDays) if (Store.days[k]) days[k] = Store.days[k];
+      if (Object.keys(days).length) await Cloud.pushDays(days);
+      const ts = Date.now();
+      await Cloud.pushRoot(Store.profile, Store.favs, Store.weights, ts);
+      Store.flags.lastSync = ts; Store.saveFlags();
+      this.dirtyDays.clear(); this.dirtyRoot = false; this.persist();
+      setAcctStatus("Synced ✓");
+    } catch (e) {
+      console.warn("Bite sync failed:", e?.code || e);
+      setAcctStatus(String(e?.code || "").includes("permission") ? "Blocked — see setup" : "Retrying…");
+      this.schedule(30000);
+    } finally {
+      this.busy = false;
+    }
+  },
+};
+
+function setAcctStatus(txt) {
+  const el = $("#acct-status");
+  if (el) el.textContent = window.Cloud?.user ? txt : "Off";
+}
+
+function refreshAcctUI() {
+  const u = window.Cloud?.user;
+  $("#acct-email").textContent = u?.email || "Not signed in";
+  $("#acct-btn").textContent = u ? "Sign out" : "Sign in";
+  setAcctStatus(u ? (Sync.dirtyRoot || Sync.dirtyDays.size ? "Pending…" : "On") : "Off");
+}
+
+/* Cloud → local. Cloud wins per section; local-only days survive and get pushed back. */
+function mergeCloud(root, cloudDays) {
+  Sync.quiet = true;
+  const localOnly = [];
+  try {
+    if (root?.profile) Store.profile = root.profile;
+    if (root?.favs?.length) Store.favs = root.favs;
+    if (root?.weights?.length) {
+      const map = new Map(Store.weights.map(w => [w.d, w.kg]));
+      root.weights.forEach(w => map.set(w.d, w.kg));
+      Store.weights = [...map.entries()].map(([d, kg]) => ({ d, kg })).sort((a, b) => (a.d < b.d ? -1 : 1));
+    }
+    for (const k of Object.keys(Store.days)) {
+      if (!cloudDays[k] && (Store.days[k].entries?.length || Store.days[k].water || Store.days[k].ex)) localOnly.push(k);
+    }
+    for (const [k, v] of Object.entries(cloudDays || {})) {
+      const loc = Store.days[k];
+      if (!loc || (v.entries?.length || 0) >= (loc.entries?.length || 0)) Store.days[k] = v;
+      else localOnly.push(k);
+    }
+    Store.saveProfile(); Store.saveFavs(); Store.saveWeights(); Store.saveDays();
+    if (Store.profile && Store.profile.waterGoal == null) Store.profile.waterGoal = 2.5;
+  } finally {
+    Sync.quiet = false;
+  }
+  Store.flags.lastSync = root?.updatedAt || Date.now();
+  Store.saveFlags();
+  if (localOnly.length) { localOnly.forEach(k => Sync.mark("day", k)); Sync.mark("root"); }
+}
+
+let cloudBootHandled = false;
+
+window.addEventListener("cloud-auth", async e => {
+  const u = e.detail;
+  refreshAcctUI();
+  if (cloudBootHandled) { if (u) Sync.schedule(500); return; }
+  cloudBootHandled = true;
+
+  if (u) {
+    if (!Store.profile) {
+      // Fresh device (or cleared storage) with a live session — restore everything.
+      try {
+        const root = await Cloud.pullRoot();
+        if (root?.profile) {
+          const days = await Cloud.pullDays();
+          mergeCloud(root, days);
+          $("#onboarding").classList.add("hidden");
+          enterApp(false);
+          toast("Restored from your account", "ok");
+        }
+      } catch (err) { console.warn("restore failed", err); }
+    } else {
+      // Both exist — pull if another device pushed something newer, then flush our queue.
+      try {
+        const root = await Cloud.pullRoot();
+        if (root && (root.updatedAt || 0) > (Store.flags.lastSync || 0)) {
+          const days = await Cloud.pullDays();
+          mergeCloud(root, days);
+          renderToday(false); renderHistory();
+        }
+      } catch (err) { console.warn("freshness pull failed", err); }
+      Sync.schedule(1000);
+    }
+  } else if (Store.profile && !Store.flags.authLater) {
+    setTimeout(() => { if (!openedSheet) openSheet($("#sheet-auth")); }, 900);
+  }
+});
+
+window.addEventListener("online", () => Sync.schedule(1500));
+document.addEventListener("visibilitychange", () => { if (document.hidden) Sync.flush(); });
+
 /* ═══════════════════ onboarding ═══════════════════ */
 
 const OB = { step: 0, name: "", sex: "", age: null, units: "us", ft: 5, in: 8, cm: null, weight: null, activity: 1.375, goal: null, p: null, c: null, f: null, bonus: 300, water: 2.5 };
-const OB_STEPS = 5;
+const OB_STEPS = 6;
 
 function showOnboarding() {
   $("#onboarding").classList.remove("hidden");
@@ -110,12 +253,113 @@ function updateMaintenance() {
 }
 
 function validateStep() {
-  const btn = OB.step === 4 ? $("#ob-finish") : $(`.ob-step[data-step="${OB.step}"] [data-next]`);
+  const btn = OB.step === 5 ? $("#ob-finish") : $(`.ob-step[data-step="${OB.step}"] [data-next]`);
   let ok = true;
-  if (OB.step === 1) ok = OB.name.trim().length > 0 && OB.sex && OB.age >= 13 && OB.age <= 110;
-  if (OB.step === 2) ok = obWeightKg() > 20 && obHeightCm() > 80;
-  if (OB.step === 3) ok = OB.goal >= 800 && OB.goal <= 8000;
+  if (OB.step === 2) ok = OB.name.trim().length > 0 && OB.sex && OB.age >= 13 && OB.age <= 110;
+  if (OB.step === 3) ok = obWeightKg() > 20 && obHeightCm() > 80;
+  if (OB.step === 4) ok = OB.goal >= 800 && OB.goal <= 8000;
   if (btn) btn.disabled = !ok;
+}
+
+/* ═══════════════════ auth forms ═══════════════════ */
+
+function wireAuthForms() {
+  wireAuthForm({
+    email: "#auth-email", pw: "#auth-pw", go: "#auth-go", swap: "#auth-swap",
+    forgot: "#auth-forgot", error: "#auth-error", title: "#auth-title",
+    createLabel: "Create account", signinLabel: "Sign in",
+    async onDone(mode) {
+      if (mode === "signin") {
+        try {
+          const root = await Cloud.pullRoot();
+          if (root?.profile) {
+            const days = await Cloud.pullDays();
+            mergeCloud(root, days);
+            $("#onboarding").classList.add("hidden");
+            enterApp(false);
+            toast(`Welcome back, ${Store.profile.name} 👋`, "ok");
+            return;
+          }
+        } catch (err) { console.warn(err); }
+      }
+      goStep(2); validateStep(); // new account (or account with no data yet) → set up profile
+    },
+  });
+
+  wireAuthForm({
+    email: "#sa-email", pw: "#sa-pw", go: "#sa-go", swap: "#sa-swap",
+    error: "#sa-error", title: "#sa-title",
+    createLabel: "Create account", signinLabel: "Sign in",
+    async onDone(mode) {
+      closeSheet();
+      if (mode === "create") {
+        Sync.markAll();
+        toast("Account created — syncing your data ✓", "ok");
+      } else {
+        try {
+          const root = await Cloud.pullRoot();
+          const days = root ? await Cloud.pullDays() : {};
+          mergeCloud(root || {}, days);
+          renderToday(false); renderHistory();
+        } catch (err) { console.warn(err); }
+        Sync.markAll();
+        toast("Signed in ✓", "ok");
+      }
+      refreshAcctUI();
+    },
+  });
+
+  $("#sa-later").addEventListener("click", () => {
+    Store.flags.authLater = true; Store.saveFlags();
+    closeSheet();
+  });
+}
+
+function wireAuthForm(cfg) {
+  const email = $(cfg.email), pw = $(cfg.pw), go = $(cfg.go), err = $(cfg.error);
+  let mode = "create";
+
+  const validate = () => {
+    go.disabled = !(email.value.includes("@") && email.value.includes(".") && pw.value.length >= 6);
+  };
+  ["input", "change"].forEach(ev => { email.addEventListener(ev, validate); pw.addEventListener(ev, validate); });
+
+  const showErr = msg => { err.textContent = msg; err.classList.toggle("hidden", !msg); };
+
+  $(cfg.swap).addEventListener("click", () => {
+    mode = mode === "create" ? "signin" : "create";
+    $(cfg.title).textContent = mode === "create" ? "Create your account" : "Welcome back";
+    go.textContent = mode === "create" ? cfg.createLabel : cfg.signinLabel;
+    $(cfg.swap).innerHTML = mode === "create"
+      ? "Already have an account? <strong>Sign in</strong>"
+      : "New here? <strong>Create an account</strong>";
+    if (cfg.forgot) $(cfg.forgot).classList.toggle("hidden", mode === "create");
+    pw.autocomplete = mode === "create" ? "new-password" : "current-password";
+    showErr("");
+  });
+
+  if (cfg.forgot) $(cfg.forgot).addEventListener("click", async () => {
+    if (!email.value.includes("@")) { showErr("Type your email above first."); return; }
+    try { await Cloud.resetPassword(email.value.trim()); toast("Reset email sent 📮", "ok"); showErr(""); }
+    catch (e) { showErr(Cloud.friendlyError(e)); }
+  });
+
+  go.addEventListener("click", async () => {
+    if (!window.Cloud) { showErr("Can't reach the account service — check your connection and try again."); return; }
+    const label = go.textContent;
+    go.disabled = true; go.textContent = mode === "create" ? "Creating…" : "Signing in…";
+    showErr("");
+    try {
+      if (mode === "create") await Cloud.create(email.value.trim(), pw.value);
+      else await Cloud.signIn(email.value.trim(), pw.value);
+      refreshAcctUI();
+      await cfg.onDone(mode);
+    } catch (e) {
+      showErr(Cloud.friendlyError(e));
+    }
+    go.textContent = label;
+    validate();
+  });
 }
 
 function wireOnboarding() {
@@ -199,9 +443,21 @@ function enterApp(fresh) {
 
 /* ═══════════════════ app shell ═══════════════════ */
 
+/* Which day new entries land on: 0 = today, -1 = yesterday. Resets each time the add sheet opens. */
+let addOffset = 0;
+const targetKey = () => Store.todayKey(addOffset);
+const entryTime = () => Date.now() + addOffset * 86400000;
+
 function wireApp() {
   $$(".tab").forEach(t => t.addEventListener("click", () => switchView(t.dataset.view)));
-  $("#btn-add").addEventListener("click", () => { buzz(10); openSheet($("#sheet-add")); });
+  $("#btn-add").addEventListener("click", () => {
+    buzz(10);
+    addOffset = 0;
+    segSet($("#day-toggle"), "0");
+    renderFavs();
+    openSheet($("#sheet-add"));
+  });
+  segWire($("#day-toggle"), v => { addOffset = +v; });
   $("#btn-settings").addEventListener("click", openSettings);
   $("#install-banner-x").addEventListener("click", () => {
     Store.flags.bannerDismissed = true; Store.saveFlags();
@@ -211,6 +467,7 @@ function wireApp() {
     const k = Store.todayKey(), d = Store.day(k);
     d.ex = !d.ex;
     Store.saveDays();
+    Sync.mark("day", k);
     buzz(12);
     $("#ex-toggle").setAttribute("aria-pressed", String(d.ex));
     renderToday(false);
@@ -227,6 +484,7 @@ function adjustWater(delta) {
   const d = Store.day(Store.todayKey());
   d.water = clamp(Math.round(((d.water || 0) + delta) * 100) / 100, 0, 15);
   Store.saveDays();
+  Sync.mark("day", Store.todayKey());
   buzz(8);
   if (delta > 0) {
     const ic = $("#water-icon");
@@ -348,12 +606,50 @@ function animateNum(el, to, dur = 700) {
   requestAnimationFrame(tick);
 }
 
-function celebrateLog(kcal) {
+function celebrateLog(kcal, toYesterday) {
   successPop();
   buzz([14, 60, 14]);
   const wrap = $(".ring-wrap");
   wrap.classList.remove("pulse"); void wrap.offsetWidth; wrap.classList.add("pulse");
-  setTimeout(() => toast(`Logged ${fmt(kcal)} kcal`, "ok"), 500);
+  setTimeout(() => toast(`Logged ${fmt(kcal)} kcal${toYesterday ? " to yesterday" : ""}`, "ok"), 500);
+}
+
+function afterLog(kcal) {
+  renderToday(false);
+  if (addOffset !== 0) renderHistory();
+  celebrateLog(kcal, addOffset < 0);
+}
+
+/* ---- favorites ---- */
+
+function renderFavs() {
+  const list = $("#fav-list");
+  list.innerHTML = Store.favs.map(f => `
+    <div class="fav-row" data-id="${f.id}" role="button" tabindex="0">
+      ${f.thumb
+        ? `<span class="fav-thumb" style="background-image:url('${f.thumb}')"></span>`
+        : `<span class="fav-thumb">${SRC_ICONS[f.src] || SRC_ICONS.manual}</span>`}
+      <span class="fav-name">${esc(f.name)}</span>
+      <span class="fav-kcal">${fmt(f.kcal)}</span>
+      <button class="fav-x" data-x="${f.id}" aria-label="Remove ${esc(f.name)} from favorites">
+        <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
+      </button>
+    </div>`).join("");
+  $("#fav-empty").classList.toggle("hidden", Store.favs.length > 0);
+  $$(".fav-row", list).forEach(r => r.addEventListener("click", ev => {
+    if (ev.target.closest(".fav-x")) return;
+    const f = Store.favs.find(x => x.id === r.dataset.id);
+    if (!f) return;
+    Store.addEntry(targetKey(), { name: f.name, kcal: f.kcal, p: f.p, c: f.c, f: f.f, src: f.src, thumb: f.thumb, favId: f.id, t: entryTime() });
+    closeSheet();
+    afterLog(f.kcal);
+  }));
+  $$(".fav-x", list).forEach(b => b.addEventListener("click", ev => {
+    ev.stopPropagation();
+    Store.removeFav(b.dataset.x);
+    buzz(8);
+    renderFavs();
+  }));
 }
 
 function successPop() {
@@ -431,7 +727,8 @@ let analyzeTimer = null;
 
 function wirePhotoFlow() {
   $("#opt-photo").addEventListener("click", () => { closeSheet(); setTimeout(() => $("#photo-input").click(), 150); });
-  $("#photo-input").addEventListener("change", async e => {
+  $("#opt-library").addEventListener("click", () => { closeSheet(); setTimeout(() => $("#library-input").click(), 150); });
+  const onPick = async e => {
     const file = e.target.files[0];
     e.target.value = "";
     if (!file) return;
@@ -442,7 +739,9 @@ function wirePhotoFlow() {
     $("#photo-note").value = "";
     photoStage("preview");
     openSheet($("#sheet-photo"));
-  });
+  };
+  $("#photo-input").addEventListener("change", onPick);
+  $("#library-input").addEventListener("change", onPick);
 
   $("#btn-analyze").addEventListener("click", analyzeMeal);
   $("#btn-retake").addEventListener("click", () => { closeSheet(); setTimeout(() => $("#photo-input").click(), 250); });
@@ -542,16 +841,16 @@ function logAnalyzedMeal() {
   const tot = mealTotals(), r = resultRatio();
   const kcal = PHOTO.override != null ? PHOTO.override : tot.kcal;
   if (kcal <= 0) { toast("Nothing left to log.", "err"); return; }
-  Store.addEntry(Store.todayKey(), {
+  Store.addEntry(targetKey(), {
     name: PHOTO.result.title || "Meal",
     kcal: Math.round(kcal), p: Math.round(tot.p * r), c: Math.round(tot.c * r), f: Math.round(tot.f * r),
     src: "photo",
     thumb: AI.thumbFrom(PHOTO.canvas),
     note: PHOTO.result.notes || "",
+    t: entryTime(),
   });
   closeSheet();
-  renderToday(false);
-  celebrateLog(kcal);
+  afterLog(kcal);
 }
 
 function handleAIError(e) {
@@ -599,13 +898,14 @@ async function startScan() {
   } catch { $("#scan-torch").classList.add("hidden"); }
 
   SCAN.on = true; SCAN.busy = false; SCAN.found = null; SCAN.thumb = null;
-  SCAN.statusIdx = 0;
-  setScanStatus(SCAN_LINES[0], false);
+  SCAN.statusIdx = 0; SCAN.misses = 0; SCAN.lastCode = "";
+  SCAN.lines = [...SCAN_LINES];
+  setScanStatus(SCAN.lines[0], false);
   clearInterval(SCAN.statusTimer);
   SCAN.statusTimer = setInterval(() => {
     if (SCAN.busy || SCAN.found) return;
-    SCAN.statusIdx = (SCAN.statusIdx + 1) % SCAN_LINES.length;
-    setScanStatus(SCAN_LINES[SCAN.statusIdx], false);
+    SCAN.statusIdx = (SCAN.statusIdx + 1) % SCAN.lines.length;
+    setScanStatus(SCAN.lines[SCAN.statusIdx], false);
   }, 4200);
   scheduleFrame(1400);
 }
@@ -637,28 +937,51 @@ async function captureFrame() {
     if (!SCAN.on) return;
     if (res.found && res.calories > 0) {
       SCAN.thumb = AI.thumbFrom(cv); // keep the frame that was read, as the entry's photo
-      foundLabel(res);
+      foundLabel(res, false);
       return;
     }
-    setScanStatus(SCAN_LINES[SCAN.statusIdx], false);
+    // Label unreadable — fall back to a visible barcode, looked up on OpenFoodFacts.
+    const code = (res.barcode || "").replace(/\D/g, "");
+    if (code.length >= 8 && code !== SCAN.lastCode) {
+      SCAN.lastCode = code;
+      setScanStatus("Barcode spotted — looking it up", true);
+      const prod = await AI.lookupBarcode(code).catch(() => null);
+      if (!SCAN.on) return;
+      if (prod) {
+        SCAN.thumb = AI.thumbFrom(cv);
+        foundLabel(prod, prod.per100);
+        return;
+      }
+      setScanStatus("Not in the barcode database — try the label", false);
+    } else {
+      SCAN.misses++;
+      if (SCAN.misses === 3 && SCAN.lines.length === SCAN_LINES.length) {
+        SCAN.lines.push("Can't read the label? Aim at the barcode instead");
+        SCAN.statusIdx = SCAN.lines.length - 1;
+      }
+      setScanStatus(SCAN.lines[SCAN.statusIdx], false);
+    }
   } catch (e) {
     if (!SCAN.on) return;
     if (e.code === "auth" || e.code === "nokey") { stopScan(); handleAIError(e); return; }
-    setScanStatus(SCAN_LINES[SCAN.statusIdx], false);
+    setScanStatus(SCAN.lines[SCAN.statusIdx], false);
   } finally {
     SCAN.busy = false;
     if (SCAN.on && !SCAN.found) scheduleFrame(2400);
   }
 }
 
-function foundLabel(res) {
+function foundLabel(res, per100) {
   SCAN.found = res;
+  SCAN.per100 = !!per100;
   SCAN.servings = 1;
   buzz([16, 70, 16]);
   $("#sheet-scan").classList.add("found");
   $("#scan-status").classList.add("hidden");
   $("#scan-name").textContent = res.product_name || "Scanned item";
-  $("#scan-serving").textContent = res.serving_size ? `Per serving · ${res.serving_size}` : "Per serving";
+  $("#scan-serving").textContent = per100
+    ? "Values per 100 g"
+    : (res.serving_size ? `Per serving · ${res.serving_size}` : "Per serving");
   renderScanTotals();
   $("#scan-result").classList.remove("hidden");
 }
@@ -673,7 +996,7 @@ function renderScanTotals() {
   const r = SCAN.found; if (!r) return;
   const s = SCAN.servings;
   $("#serv-count").textContent = s % 1 === 0 ? s : s.toFixed(1);
-  $(".stepper-val span").textContent = s === 1 ? "serving" : "servings";
+  $(".stepper-val span").textContent = SCAN.per100 ? "× 100 g" : (s === 1 ? "serving" : "servings");
   $("#scan-kcal").textContent = fmt(r.calories * s);
   $("#scan-macros").innerHTML =
     `<span class="mp">P ${Math.round(r.protein_g * s)}g</span><span class="mc">C ${Math.round(r.carbs_g * s)}g</span><span class="mf">F ${Math.round(r.fat_g * s)}g</span>`;
@@ -692,16 +1015,16 @@ function resumeScan() {
 function logScan() {
   const r = SCAN.found; if (!r) return;
   const s = SCAN.servings;
-  Store.addEntry(Store.todayKey(), {
+  Store.addEntry(targetKey(), {
     name: r.product_name || "Scanned item",
     kcal: Math.round(r.calories * s), p: Math.round(r.protein_g * s),
     c: Math.round(r.carbs_g * s), f: Math.round(r.fat_g * s),
     src: "scan",
     thumb: SCAN.thumb || undefined,
+    t: entryTime(),
   });
   stopScan();
-  renderToday(false);
-  celebrateLog(r.calories * s);
+  afterLog(r.calories * s);
 }
 
 function stopScan() {
@@ -737,15 +1060,40 @@ function wireManual() {
   $("#man-log").addEventListener("click", () => {
     const kcal = +$("#man-kcal").value;
     if (!(kcal > 0)) return;
-    Store.addEntry(Store.todayKey(), {
+    Store.addEntry(targetKey(), {
       name: $("#man-name").value.trim() || "Quick add",
       kcal: Math.round(kcal),
       p: Math.round(+$("#man-p").value || 0), c: Math.round(+$("#man-c").value || 0), f: Math.round(+$("#man-f").value || 0),
       src: "manual",
+      t: entryTime(),
     });
     closeSheet();
-    renderToday(false);
-    celebrateLog(kcal);
+    afterLog(kcal);
+  });
+
+  $("#man-ai").addEventListener("click", async () => {
+    const txt = $("#man-name").value.trim();
+    if (!txt) { toast("Describe it first — e.g. '2 eggs and toast'", "err"); return; }
+    const btn = $("#man-ai"), label = $("#man-ai span");
+    btn.disabled = true; label.textContent = "Estimating…";
+    try {
+      const res = await AI.describeMeal(txt);
+      if (!res.is_food || !res.items.length) {
+        toast("Claude couldn't read that as food — try rewording.", "err");
+      } else {
+        const t = res.items.reduce((a, it) => ({
+          kcal: a.kcal + it.calories, p: a.p + it.protein_g, c: a.c + it.carbs_g, f: a.f + it.fat_g,
+        }), { kcal: 0, p: 0, c: 0, f: 0 });
+        if (res.title) $("#man-name").value = res.title;
+        $("#man-kcal").value = Math.round(t.kcal);
+        $("#man-p").value = Math.round(t.p);
+        $("#man-c").value = Math.round(t.c);
+        $("#man-f").value = Math.round(t.f);
+        $("#man-log").disabled = !(t.kcal > 0);
+        buzz(10);
+      }
+    } catch (e) { handleAIError(e); }
+    btn.disabled = false; label.textContent = "Estimate with Claude";
   });
 }
 
@@ -754,6 +1102,23 @@ function wireManual() {
 let editingEntry = null;
 
 function wireEntrySheet() {
+  $("#entry-star").addEventListener("click", () => {
+    if (!editingEntry) return;
+    const en = editingEntry.entry;
+    const on = !!(en.favId && Store.hasFav(en.favId));
+    if (on) {
+      Store.removeFav(en.favId);
+      delete en.favId;
+    } else {
+      en.favId = Store.addFav(en).id;
+      toast("Saved to favorites ★", "ok");
+    }
+    Store.saveDays();
+    Sync.mark("day", editingEntry.dateKey);
+    buzz(10);
+    $("#entry-star").setAttribute("aria-pressed", String(!on));
+  });
+
   $("#entry-save").addEventListener("click", () => {
     if (!editingEntry) return;
     const { entry } = editingEntry;
@@ -763,6 +1128,7 @@ function wireEntrySheet() {
     entry.c = Math.max(0, Math.round(+$("#entry-c").value || 0));
     entry.f = Math.max(0, Math.round(+$("#entry-f").value || 0));
     Store.saveDays();
+    Sync.mark("day", editingEntry.dateKey);
     closeSheet();
     renderToday(false); renderHistory();
     toast("Updated", "ok");
@@ -797,12 +1163,67 @@ function openEntry(id) {
   $("#entry-p").value = e.p || "";
   $("#entry-c").value = e.c || "";
   $("#entry-f").value = e.f || "";
+  $("#entry-star").setAttribute("aria-pressed", String(!!(e.favId && Store.hasFav(e.favId))));
   openSheet($("#sheet-entry"));
 }
 
 /* ═══════════════════ history ═══════════════════ */
 
+/* ---- weight ---- */
+
+function wireWeight() {
+  $("#btn-log-weight").addEventListener("click", () => {
+    const us = Store.profile.units === "us";
+    $("#weight-input-unit").textContent = us ? "(lb)" : "(kg)";
+    $("#weight-input").value = "";
+    $("#weight-input").placeholder = us ? Math.round(Store.profile.weightKg / 0.45359) : Store.profile.weightKg;
+    openSheet($("#sheet-weight"));
+    setTimeout(() => $("#weight-input").focus(), 480);
+  });
+  $("#weight-input").addEventListener("keydown", e => { if (e.key === "Enter") e.target.blur(); });
+  $("#weight-save").addEventListener("click", () => {
+    const us = Store.profile.units === "us";
+    const v = +$("#weight-input").value;
+    if (!(v > 20 && v < (us ? 1500 : 700))) { toast("Enter a weight first", "err"); return; }
+    Store.logWeight(Math.round((us ? v * 0.45359 : v) * 10) / 10);
+    closeSheet();
+    renderHistory();
+    toast("Weight logged", "ok");
+  });
+}
+
+function renderWeightCard() {
+  const p = Store.profile, us = p.units === "us";
+  const toUnit = kg => us ? Math.round(kg / 0.45359) : Math.round(kg * 10) / 10;
+  $("#weight-now-unit").textContent = us ? "lb" : "kg";
+  const pts = Store.weights.slice(-60);
+  const last = pts[pts.length - 1];
+  $("#weight-now").textContent = last ? toUnit(last.kg) : "—";
+  const svg = $("#weight-spark");
+  const hint = $("#weight-hint");
+  if (pts.length < 2) {
+    svg.innerHTML = "";
+    hint.textContent = pts.length ? "Log again tomorrow to start your trend." : "Log your weight to start the trend line.";
+    return;
+  }
+  const kgs = pts.map(w => w.kg);
+  const min = Math.min(...kgs), max = Math.max(...kgs);
+  const pad = Math.max((max - min) * 0.2, 0.4);
+  const y = v => 50 - ((v - (min - pad)) / ((max - min) + pad * 2)) * 46;
+  const x = i => 4 + (i / (pts.length - 1)) * 192;
+  svg.innerHTML =
+    `<polyline vector-effect="non-scaling-stroke" points="${pts.map((w, i) => `${x(i).toFixed(1)},${y(w.kg).toFixed(1)}`).join(" ")}"/>` +
+    `<circle cx="${x(pts.length - 1).toFixed(1)}" cy="${y(last.kg).toFixed(1)}" r="3"/>`;
+  const delta = last.kg - pts[0].kg;
+  const span = Math.max(1, Math.round((new Date(last.d) - new Date(pts[0].d)) / 86400000));
+  const amt = us ? Math.abs(delta) / 0.45359 : Math.abs(delta);
+  hint.textContent = Math.abs(delta) < 0.05
+    ? `Steady over the last ${span} day${span > 1 ? "s" : ""}`
+    : `${delta < 0 ? "Down" : "Up"} ${Math.round(amt * 10) / 10} ${us ? "lb" : "kg"} over ${span} day${span > 1 ? "s" : ""}`;
+}
+
 function renderHistory() {
+  renderWeightCard();
   const chart = $("#week-chart");
   const days = [];
   for (let i = 6; i >= 0; i--) {
@@ -887,10 +1308,30 @@ function wireSettings() {
 
   $("#settings-done").addEventListener("click", closeSheet);
 
+  $("#acct-btn").addEventListener("click", async () => {
+    if (window.Cloud?.user) {
+      closeSheet();
+      const yes = await showConfirm("Sign out?", "Your data stays on this phone and in your account — it just stops syncing until you sign in again.", "Sign out");
+      if (yes) {
+        try { await Cloud.signOutUser(); } catch {}
+        Store.flags.authLater = true; Store.saveFlags();
+        refreshAcctUI();
+        toast("Signed out", "ok");
+      }
+    } else {
+      openSheet($("#sheet-auth"));
+    }
+  });
+
   $("#set-reset").addEventListener("click", async () => {
     closeSheet();
-    const yes = await showConfirm("Reset everything?", "Your profile, log history and API key will be wiped from this device. This can't be undone.", "Reset");
-    if (yes) { Store.resetAll(); location.reload(); }
+    const yes = await showConfirm("Reset everything?", "Wipes this phone's data and signs out. Your account's cloud copy is not deleted.", "Reset");
+    if (yes) {
+      try { await window.Cloud?.signOutUser(); } catch {}
+      Store.resetAll();
+      localStorage.removeItem("bite.dirty");
+      location.reload();
+    }
   });
 }
 
@@ -922,6 +1363,7 @@ function populateSettings() {
 
 function openSettings() {
   populateSettings();
+  refreshAcctUI();
   openSheet($("#sheet-settings"));
 }
 

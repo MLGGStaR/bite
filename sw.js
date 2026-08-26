@@ -2,7 +2,7 @@
    the cache is only a fallback for offline launches. */
 "use strict";
 
-const VERSION = "bite-v3";
+const VERSION = "bite-v5";
 const ASSETS = [
   "./",
   "./index.html",
@@ -10,6 +10,7 @@ const ASSETS = [
   "./js/store.js",
   "./js/ai.js",
   "./js/app.js",
+  "./js/cloud.js",
   "./manifest.webmanifest",
   "./icons/icon-180.png",
   "./icons/icon-192.png",

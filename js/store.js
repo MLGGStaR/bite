@@ -10,11 +10,13 @@ const Store = {
     try { this.profile = JSON.parse(localStorage.getItem("bite.profile") || "null"); } catch { this.profile = null; }
     try { this.days = JSON.parse(localStorage.getItem("bite.days") || "{}"); } catch { this.days = {}; }
     try { this.flags = JSON.parse(localStorage.getItem("bite.flags") || "{}"); } catch { this.flags = {}; }
+    try { this.favs = JSON.parse(localStorage.getItem("bite.favs") || "[]"); } catch { this.favs = []; }
+    try { this.weights = JSON.parse(localStorage.getItem("bite.weights") || "[]"); } catch { this.weights = []; }
     if (this.profile && this.profile.waterGoal == null) this.profile.waterGoal = 2.5; // migrate older profiles
     this.pruneThumbs();
   },
 
-  saveProfile() { localStorage.setItem("bite.profile", JSON.stringify(this.profile)); },
+  saveProfile() { localStorage.setItem("bite.profile", JSON.stringify(this.profile)); window.Sync?.mark("root"); },
   saveFlags()   { localStorage.setItem("bite.flags", JSON.stringify(this.flags)); },
 
   saveDays() {
@@ -51,6 +53,7 @@ const Store = {
     entry.t = entry.t || Date.now();
     this.day(dateKey).entries.push(entry);
     this.saveDays();
+    window.Sync?.mark("day", dateKey);
     return entry;
   },
 
@@ -58,6 +61,7 @@ const Store = {
     const d = this.day(dateKey);
     d.entries = d.entries.filter(e => e.id !== id);
     this.saveDays();
+    window.Sync?.mark("day", dateKey);
   },
 
   findEntry(id) {
@@ -82,6 +86,42 @@ const Store = {
     const base = this.profile ? this.profile.goalKcal : 2000;
     const d = this.days[dateKey];
     return base + (d && d.ex ? (this.profile?.bonus || 0) : 0);
+  },
+
+  /* ---- favorites ---- */
+
+  saveFavs() { localStorage.setItem("bite.favs", JSON.stringify(this.favs)); window.Sync?.mark("root"); },
+
+  addFav(e) {
+    const f = {
+      id: "f" + Math.random().toString(36).slice(2, 9),
+      name: e.name, kcal: e.kcal, p: e.p || 0, c: e.c || 0, f: e.f || 0,
+      thumb: e.thumb || undefined, src: e.src || "manual",
+    };
+    this.favs.unshift(f);
+    if (this.favs.length > 30) this.favs.length = 30;
+    this.saveFavs();
+    return f;
+  },
+
+  removeFav(id) {
+    this.favs = this.favs.filter(f => f.id !== id);
+    this.saveFavs();
+  },
+
+  hasFav(id) { return this.favs.some(f => f.id === id); },
+
+  /* ---- weight log ---- */
+
+  saveWeights() { localStorage.setItem("bite.weights", JSON.stringify(this.weights)); window.Sync?.mark("root"); },
+
+  logWeight(kg) {
+    const k = this.todayKey();
+    const hit = this.weights.find(w => w.d === k);
+    if (hit) hit.kg = kg;
+    else { this.weights.push({ d: k, kg }); this.weights.sort((a, b) => (a.d < b.d ? -1 : 1)); }
+    this.saveWeights();
+    if (this.profile) { this.profile.weightKg = kg; this.saveProfile(); }
   },
 
   /* Mifflin-St Jeor maintenance estimate */
@@ -111,5 +151,7 @@ const Store = {
     localStorage.removeItem("bite.days");
     localStorage.removeItem("bite.flags");
     localStorage.removeItem("bite.key");
+    localStorage.removeItem("bite.favs");
+    localStorage.removeItem("bite.weights");
   },
 };

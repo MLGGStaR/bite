@@ -5,7 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>Bite</title>
 <meta name="description" content="Point. Shoot. Tracked. AI calorie tracking with Claude.">
-<meta name="theme-color" content="#F6F6F4">
+<meta name="theme-color" content="#F6F6F4" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0F1013" media="(prefers-color-scheme: dark)">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/png" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/icon-180.png">
@@ -47,13 +48,33 @@
         <p class="ob-sub">Snap a photo of any meal and Claude estimates the calories, protein, carbs and fat. Scan nutrition labels live. Hit your goal.</p>
       </div>
       <div class="ob-actions">
-        <p id="install-hint" class="install-hint hidden">Tip: install Bite first so your data sticks — tap <strong>Share</strong> → <strong>Add to Home Screen</strong>, then open it from your home screen.</p>
+        <p id="install-hint" class="install-hint hidden">Tip: install Bite first — tap <strong>Share</strong> → <strong>Add to Home Screen</strong>, then open it from your home screen.</p>
         <button class="btn-primary" data-next>Get started</button>
       </div>
     </section>
 
-    <!-- 1 · About you -->
+    <!-- 1 · Account -->
     <section class="ob-step" data-step="1">
+      <h2 class="ob-title" id="auth-title">Create your account</h2>
+      <p class="ob-caption" id="auth-caption">Your meals, water and weight live on it — sign in on any phone and everything's there.</p>
+      <div class="field">
+        <label for="auth-email">Email</label>
+        <input id="auth-email" type="email" autocomplete="email" autocapitalize="off" placeholder="you@email.com">
+      </div>
+      <div class="field">
+        <label for="auth-pw">Password</label>
+        <input id="auth-pw" type="password" autocomplete="new-password" placeholder="6+ characters">
+      </div>
+      <p class="auth-error hidden" id="auth-error"></p>
+      <div class="ob-actions">
+        <button class="btn-primary" id="auth-go" disabled>Create account</button>
+        <button class="link-btn auth-alt" id="auth-swap">Already have an account? <strong>Sign in</strong></button>
+        <button class="link-btn auth-alt hidden" id="auth-forgot">Forgot password?</button>
+      </div>
+    </section>
+
+    <!-- 2 · About you -->
+    <section class="ob-step" data-step="2">
       <h2 class="ob-title">About you</h2>
       <p class="ob-caption">Used to estimate your daily burn. Stays on this phone.</p>
       <div class="field">
@@ -73,8 +94,8 @@
       <div class="ob-actions"><button class="btn-primary" data-next disabled>Continue</button></div>
     </section>
 
-    <!-- 2 · Body -->
-    <section class="ob-step" data-step="2">
+    <!-- 3 · Body -->
+    <section class="ob-step" data-step="3">
       <h2 class="ob-title">Your body</h2>
       <p class="ob-caption">Height and weight sharpen the estimate.</p>
       <div class="field">
@@ -101,8 +122,8 @@
       <div class="ob-actions"><button class="btn-primary" data-next disabled>Continue</button></div>
     </section>
 
-    <!-- 3 · Goal -->
-    <section class="ob-step" data-step="3">
+    <!-- 4 · Goal -->
+    <section class="ob-step" data-step="4">
       <h2 class="ob-title">Daily calorie goal</h2>
       <p class="ob-caption">How active are you on a normal day?</p>
       <div class="field">
@@ -123,8 +144,8 @@
       <div class="ob-actions"><button class="btn-primary" data-next disabled>Continue</button></div>
     </section>
 
-    <!-- 4 · Macros + exercise -->
-    <section class="ob-step" data-step="4">
+    <!-- 5 · Macros + exercise -->
+    <section class="ob-step" data-step="5">
       <h2 class="ob-title">Fine-tuning</h2>
       <p class="ob-caption">Both optional — you can change them anytime.</p>
       <button class="reveal-toggle" id="ob-macro-toggle" aria-expanded="false">
@@ -257,6 +278,14 @@
 
     <!-- HISTORY -->
     <section id="view-history" class="view hidden">
+      <div class="card weight-card">
+        <div class="card-head"><h3>Weight</h3><button class="link-btn" id="btn-log-weight">Log</button></div>
+        <div class="weight-row">
+          <div class="weight-now"><strong id="weight-now">—</strong><span id="weight-now-unit">lb</span></div>
+          <svg id="weight-spark" viewBox="0 0 200 54" preserveAspectRatio="none" aria-hidden="true"></svg>
+        </div>
+        <p class="weight-hint" id="weight-hint"></p>
+      </div>
       <div class="card chart-card">
         <div class="card-head"><h3>Last 7 days</h3><span class="chart-avg" id="chart-avg"></span></div>
         <div class="chart" id="week-chart"></div>
@@ -291,29 +320,44 @@
 <!-- Add options -->
 <div id="sheet-add" class="sheet hidden" role="dialog" aria-label="Add food">
   <div class="grabber"></div>
-  <h3 class="sheet-title">Add food</h3>
-  <div class="add-options">
-    <button class="add-opt" id="opt-photo">
+  <div class="add-head">
+    <h3 class="sheet-title">Add food</h3>
+    <div class="segmented mini" id="day-toggle">
+      <button data-val="0" class="on">Today</button><button data-val="-1">Yesterday</button>
+    </div>
+  </div>
+  <div class="add-grid">
+    <button class="add-tile" id="opt-photo">
       <span class="add-opt-icon grad">
         <svg viewBox="0 0 24 24"><path d="M4 7h3l1.5-2h7L17 7h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1z" fill="none" stroke="white" stroke-width="1.8" stroke-linejoin="round"/><circle cx="12" cy="13" r="3.2" fill="none" stroke="white" stroke-width="1.8"/></svg>
       </span>
-      <span class="add-opt-text"><strong>Snap a meal</strong><span>Claude estimates the nutrition</span></span>
+      <strong>Snap</strong><span>Camera + Claude</span>
     </button>
-    <button class="add-opt" id="opt-scan">
+    <button class="add-tile" id="opt-scan">
       <span class="add-opt-icon dark">
         <svg viewBox="0 0 24 24"><path d="M3 8V5a2 2 0 0 1 2-2h3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M8 21H5a2 2 0 0 1-2-2v-3" fill="none" stroke="white" stroke-width="2" stroke-linecap="round"/><path d="M7 12h10" stroke="white" stroke-width="2" stroke-linecap="round"/></svg>
       </span>
-      <span class="add-opt-text"><strong>Scan a label</strong><span>Live-reads Nutrition Facts</span></span>
+      <strong>Scan</strong><span>Label or barcode</span>
     </button>
-    <button class="add-opt" id="opt-manual">
+    <button class="add-tile" id="opt-library">
+      <span class="add-opt-icon blue">
+        <svg viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5" fill="none" stroke="white" stroke-width="1.8"/><circle cx="9" cy="10" r="1.8" fill="white"/><path d="M4 17l4.8-4.5 3.6 3.2 3.2-2.7L20 17" fill="none" stroke="white" stroke-width="1.8" stroke-linejoin="round"/></svg>
+      </span>
+      <strong>Library</strong><span>Pick a photo</span>
+    </button>
+    <button class="add-tile" id="opt-manual">
       <span class="add-opt-icon plain">
         <svg viewBox="0 0 24 24"><path d="M4 20h4l11-11-4-4L4 16v4z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
       </span>
-      <span class="add-opt-text"><strong>Add manually</strong><span>Type it in yourself</span></span>
+      <strong>Manual</strong><span>Type or describe</span>
     </button>
   </div>
+  <p class="group-label favs-label">Favorites</p>
+  <div id="fav-list" class="fav-list"></div>
+  <p id="fav-empty" class="fav-empty">Open a logged meal and tap the star — it'll live here for one-tap logging.</p>
 </div>
 <input type="file" id="photo-input" accept="image/*" capture="environment" hidden>
+<input type="file" id="library-input" accept="image/*" hidden>
 
 <!-- Photo analyze -->
 <div id="sheet-photo" class="sheet hidden" role="dialog" aria-label="Analyze meal">
@@ -392,7 +436,14 @@
 <div id="sheet-manual" class="sheet hidden" role="dialog" aria-label="Add manually">
   <div class="grabber"></div>
   <h3 class="sheet-title">Add manually</h3>
-  <div class="field"><label for="man-name">Name</label><input id="man-name" type="text" placeholder="Protein shake" maxlength="60"></div>
+  <div class="field">
+    <label for="man-name">Name or description</label>
+    <input id="man-name" type="text" placeholder="e.g. 2 eggs and toast with butter" maxlength="140">
+  </div>
+  <button class="ai-estimate" id="man-ai">
+    <svg viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8zM18.5 15.5l.9 2.6 2.6.9-2.6.9-.9 2.6-.9-2.6-2.6-.9 2.6-.9z" fill="currentColor"/></svg>
+    <span>Estimate with Claude</span>
+  </button>
   <div class="field"><label for="man-kcal">Calories</label><input id="man-kcal" type="number" inputmode="numeric" placeholder="220"></div>
   <div class="row-3">
     <div class="field"><label for="man-p">Protein g</label><input id="man-p" type="number" inputmode="decimal" placeholder="0"></div>
@@ -407,10 +458,13 @@
   <div class="grabber"></div>
   <div class="entry-head">
     <div class="entry-thumb" id="entry-thumb"></div>
-    <div>
+    <div class="entry-head-info">
       <input id="entry-name" class="entry-name-input" type="text" maxlength="60" aria-label="Meal name">
       <p class="entry-time" id="entry-time"></p>
     </div>
+    <button class="star-btn" id="entry-star" aria-label="Toggle favorite" aria-pressed="false">
+      <svg viewBox="0 0 24 24"><path d="M12 3.8l2.5 5.1 5.6.8-4 4 .9 5.6-5-2.6-5 2.6.9-5.6-4-4 5.6-.8z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+    </button>
   </div>
   <div class="field"><label for="entry-kcal">Calories</label><input id="entry-kcal" type="number" inputmode="numeric"></div>
   <div class="row-3">
@@ -432,6 +486,13 @@
     <button class="link-btn" id="settings-done">Done</button>
   </div>
   <div class="settings-scroll">
+
+    <p class="group-label">Account</p>
+    <div class="group">
+      <div class="set-row"><label>Email</label><span class="set-static" id="acct-email">Not signed in</span></div>
+      <div class="set-row"><label>Sync</label><span class="set-static" id="acct-status">Off</span></div>
+      <div class="set-row"><label>Session</label><button class="link-btn" id="acct-btn">Sign in</button></div>
+    </div>
 
     <p class="group-label">Profile</p>
     <div class="group">
@@ -466,6 +527,38 @@
   </div>
 </div>
 
+<!-- Account prompt (existing local users / settings sign-in) -->
+<div id="sheet-auth" class="sheet hidden" role="dialog" aria-label="Account">
+  <div class="grabber"></div>
+  <h3 class="sheet-title" id="sa-title">Your data, everywhere</h3>
+  <p class="confirm-body" id="sa-caption">Bite now uses accounts. Create one and everything on this phone syncs to it — safe even if you lose the phone.</p>
+  <div class="field">
+    <label for="sa-email">Email</label>
+    <input id="sa-email" type="email" autocomplete="email" autocapitalize="off" placeholder="you@email.com">
+  </div>
+  <div class="field">
+    <label for="sa-pw">Password</label>
+    <input id="sa-pw" type="password" autocomplete="new-password" placeholder="6+ characters">
+  </div>
+  <p class="auth-error hidden" id="sa-error"></p>
+  <button class="btn-primary" id="sa-go" disabled>Create account</button>
+  <div class="sa-links">
+    <button class="link-btn" id="sa-swap">Already have an account? <strong>Sign in</strong></button>
+    <button class="link-btn sa-muted" id="sa-later">Not now</button>
+  </div>
+</div>
+
+<!-- Log weight -->
+<div id="sheet-weight" class="sheet hidden" role="dialog" aria-label="Log weight">
+  <div class="grabber"></div>
+  <h3 class="sheet-title">Log weight</h3>
+  <div class="field">
+    <label for="weight-input">Today's weight <span id="weight-input-unit">(lb)</span></label>
+    <input id="weight-input" type="number" inputmode="decimal">
+  </div>
+  <button class="btn-primary" id="weight-save">Save</button>
+</div>
+
 <!-- Confirm dialog -->
 <div id="sheet-confirm" class="sheet hidden" role="alertdialog" aria-label="Confirm">
   <div class="grabber"></div>
@@ -482,5 +575,6 @@
 <script src="js/store.js"></script>
 <script src="js/ai.js"></script>
 <script src="js/app.js"></script>
+<script type="module" src="js/cloud.js"></script>
 </body>
 </html>
