@@ -17,8 +17,10 @@ let currentDateKey = "";
 window.addEventListener("DOMContentLoaded", () => {
   Store.load();
   Sync.load();
+  applyTheme(Store.flags.theme || "system");
   registerSW();
   wireAuthForms();
+  wireSheetDrag();
   buildHeightSelects();
   wireOnboarding();
   wireApp();
@@ -53,6 +55,20 @@ function registerSW() {
 
 const IS_IOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
 const IS_STANDALONE = navigator.standalone === true || matchMedia("(display-mode: standalone)").matches;
+
+/* ═══════════════════ theme ═══════════════════ */
+
+function applyTheme(mode) {
+  const root = document.documentElement;
+  if (mode === "light" || mode === "dark") root.dataset.theme = mode;
+  else delete root.dataset.theme;
+  const dark = mode === "dark" || (mode !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
+  $$('meta[name="theme-color"]').forEach(m => m.setAttribute("content", dark ? "#0F1013" : "#F6F6F4"));
+}
+
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+  applyTheme(Store.flags.theme || "system");
+});
 
 /* ═══════════════════ cloud sync ═══════════════════ */
 
@@ -673,6 +689,64 @@ let openedSheet = null;
 function wireSheets() {
   $("#backdrop").addEventListener("click", closeSheet);
   $$(".sheet .grabber").forEach(g => g.addEventListener("click", closeSheet));
+}
+
+/* Swipe-down anywhere on a sheet (when its content is scrolled to the top)
+   drags it with your finger and dismisses it — iOS style. */
+function wireSheetDrag() {
+  $$(".sheet").forEach(sheet => {
+    let startY = 0, startX = 0, dy = 0, dragging = false, canDrag = false, t0 = 0;
+    const desktop = () => matchMedia("(min-width: 700px)").matches;
+    const setY = y => { sheet.style.transform = desktop() ? `translate(-50%, ${y}px)` : `translateY(${y}px)`; };
+
+    sheet.addEventListener("touchstart", e => {
+      if (openedSheet !== sheet) return;
+      const t = e.touches[0];
+      startY = t.clientY; startX = t.clientX; dy = 0; dragging = false; t0 = performance.now();
+      const scroller = sheet.classList.contains("tall") ? $(".settings-scroll", sheet) : sheet;
+      canDrag = !scroller || scroller.scrollTop <= 0;
+    }, { passive: true });
+
+    sheet.addEventListener("touchmove", e => {
+      if (openedSheet !== sheet || !canDrag) return;
+      const t = e.touches[0];
+      const moveY = t.clientY - startY, moveX = t.clientX - startX;
+      if (!dragging) {
+        if (moveY > 10 && Math.abs(moveY) > Math.abs(moveX) * 1.4) {
+          dragging = true;
+          sheet.style.transition = "none";
+        } else if (moveY < -6) { canDrag = false; return; }
+        else return;
+      }
+      dy = Math.max(0, moveY - 10);
+      setY(dy);
+      if (e.cancelable) e.preventDefault();
+    }, { passive: false });
+
+    const end = () => {
+      if (!dragging) { canDrag = false; return; }
+      dragging = false;
+      const vel = dy / Math.max(1, performance.now() - t0);
+      if (dy > 130 || (dy > 45 && vel > 0.45)) {
+        openedSheet = null;
+        $("#backdrop").classList.remove("show");
+        sheet.style.transition = "transform .28s ease-in";
+        setY(window.innerHeight);
+        setTimeout(() => {
+          sheet.classList.remove("show");
+          sheet.classList.add("hidden");
+          sheet.style.transition = ""; sheet.style.transform = "";
+          if (!openedSheet) $("#backdrop").classList.add("hidden");
+        }, 290);
+      } else {
+        sheet.style.transition = "transform .45s var(--spring)";
+        sheet.style.transform = "";
+        setTimeout(() => { if (!dragging) sheet.style.transition = ""; }, 460);
+      }
+    };
+    sheet.addEventListener("touchend", end);
+    sheet.addEventListener("touchcancel", end);
+  });
 }
 
 function openSheet(el) {
@@ -1308,6 +1382,12 @@ function wireSettings() {
 
   $("#settings-done").addEventListener("click", closeSheet);
 
+  segWire($("#set-theme"), v => {
+    Store.flags.theme = v;
+    Store.saveFlags();
+    applyTheme(v);
+  });
+
   $("#acct-btn").addEventListener("click", async () => {
     if (window.Cloud?.user) {
       closeSheet();
@@ -1359,6 +1439,7 @@ function populateSettings() {
   $("#set-f").value = p.macroF || "";
   $("#set-bonus").value = p.bonus;
   $("#set-water").value = p.waterGoal || 2.5;
+  segSet($("#set-theme"), Store.flags.theme || "system");
 }
 
 function openSettings() {

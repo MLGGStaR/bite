@@ -733,44 +733,46 @@ button { font-family: inherit; border: 0; background: none; color: inherit; curs
   .tabbar { max-width: 560px; margin: 0 auto; border-radius: 24px 24px 0 0; }
 }
 
-/* ═══════════ dark mode ═══════════ */
+/* ═══════════ dark mode ═══════════
+   Applies when the system is dark (unless the user forced Light in Settings)
+   or when the user forced Dark. Token values are duplicated across the two
+   selector contexts — keep them identical. */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     color-scheme: dark;
-    --bg: #0F1013;
-    --card: #1A1B20;
-    --ink: #F2F2F4;
-    --ink-2: #A7A9B0;
-    --ink-3: #63656C;
-    --line: #26272C;
-    --fill: #26272C;
-    --fill-2: #222327;
-    --grab: #3A3C42;
-    --p: #FF5C8A;
-    --c: #F5A623;
-    --f: #37B3D6;
-    --water: #3E97EC;
-    --over: #FF5D52;
-    --tint-accent: rgba(255,59,92,.16);
-    --tint-good: rgba(52,199,89,.16);
-    --good: #4CD07D;
-    --tint-bad: rgba(255,69,58,.16);
-    --tint-warm: rgba(255,159,10,.16);
-    --warm: #FFB340;
-    --tint-water: rgba(62,151,236,.18);
-    --bar-muted: rgba(255,92,138,.30);
-    --tab-bg: rgba(17,18,22,.85);
-    --tab-line: rgba(255,255,255,.07);
-    --pop-bg: rgba(15,16,19,.65);
-    --card-line: #26272C;
+    --bg: #0F1013; --card: #1A1B20; --ink: #F2F2F4; --ink-2: #A7A9B0; --ink-3: #63656C;
+    --line: #26272C; --fill: #26272C; --fill-2: #222327; --grab: #3A3C42;
+    --p: #FF5C8A; --c: #F5A623; --f: #37B3D6; --water: #3E97EC; --over: #FF5D52;
+    --tint-accent: rgba(255,59,92,.16); --tint-good: rgba(52,199,89,.16); --good: #4CD07D;
+    --tint-bad: rgba(255,69,58,.16); --tint-warm: rgba(255,159,10,.16); --warm: #FFB340;
+    --tint-water: rgba(62,151,236,.18); --bar-muted: rgba(255,92,138,.30);
+    --tab-bg: rgba(17,18,22,.85); --tab-line: rgba(255,255,255,.07);
+    --pop-bg: rgba(15,16,19,.65); --card-line: #26272C;
   }
-  .card, .add-tile { box-shadow: none; }
-  .icon-btn { box-shadow: none; border: 1px solid var(--card-line); }
-  .segmented button.on { box-shadow: none; }
-  .install-banner { background: #26272C; }
-  .add-opt-icon.dark { background: #000; }
-  .switch .knob { background: #E8E8EA; }
+  :root:not([data-theme="light"]) .card, :root:not([data-theme="light"]) .add-tile { box-shadow: none; }
+  :root:not([data-theme="light"]) .icon-btn { box-shadow: none; border: 1px solid var(--card-line); }
+  :root:not([data-theme="light"]) .segmented button.on { box-shadow: none; }
+  :root:not([data-theme="light"]) .install-banner { background: #26272C; }
+  :root:not([data-theme="light"]) .add-opt-icon.dark { background: #000; }
+  :root:not([data-theme="light"]) .switch .knob { background: #E8E8EA; }
 }
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0F1013; --card: #1A1B20; --ink: #F2F2F4; --ink-2: #A7A9B0; --ink-3: #63656C;
+  --line: #26272C; --fill: #26272C; --fill-2: #222327; --grab: #3A3C42;
+  --p: #FF5C8A; --c: #F5A623; --f: #37B3D6; --water: #3E97EC; --over: #FF5D52;
+  --tint-accent: rgba(255,59,92,.16); --tint-good: rgba(52,199,89,.16); --good: #4CD07D;
+  --tint-bad: rgba(255,69,58,.16); --tint-warm: rgba(255,159,10,.16); --warm: #FFB340;
+  --tint-water: rgba(62,151,236,.18); --bar-muted: rgba(255,92,138,.30);
+  --tab-bg: rgba(17,18,22,.85); --tab-line: rgba(255,255,255,.07);
+  --pop-bg: rgba(15,16,19,.65); --card-line: #26272C;
+}
+:root[data-theme="dark"] .card, :root[data-theme="dark"] .add-tile { box-shadow: none; }
+:root[data-theme="dark"] .icon-btn { box-shadow: none; border: 1px solid var(--card-line); }
+:root[data-theme="dark"] .segmented button.on { box-shadow: none; }
+:root[data-theme="dark"] .install-banner { background: #26272C; }
+:root[data-theme="dark"] .add-opt-icon.dark { background: #000; }
+:root[data-theme="dark"] .switch .knob { background: #E8E8EA; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }

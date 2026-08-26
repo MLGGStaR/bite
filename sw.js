@@ -2,7 +2,7 @@
    the cache is only a fallback for offline launches. */
 "use strict";
 
-const VERSION = "bite-v5";
+const VERSION = "bite-v6";
 const ASSETS = [
   "./",
   "./index.html",

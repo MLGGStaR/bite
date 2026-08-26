@@ -7,6 +7,9 @@
 <meta name="description" content="Point. Shoot. Tracked. AI calorie tracking with Claude.">
 <meta name="theme-color" content="#F6F6F4" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#0F1013" media="(prefers-color-scheme: dark)">
+<script>/* apply a forced theme before CSS paints, so there's no flash */
+try { var __t = JSON.parse(localStorage.getItem("bite.flags") || "{}").theme;
+if (__t === "light" || __t === "dark") document.documentElement.dataset.theme = __t; } catch (e) {}</script>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" type="image/png" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/icon-180.png">
@@ -520,7 +523,12 @@
 
     <p class="group-label">App</p>
     <div class="group">
-      <div class="set-row"><label>Version</label><span class="set-static">1.0</span></div>
+      <div class="set-row"><label>Theme</label>
+        <div class="segmented mini" id="set-theme">
+          <button data-val="system">Auto</button><button data-val="light">Light</button><button data-val="dark">Dark</button>
+        </div>
+      </div>
+      <div class="set-row"><label>Version</label><span class="set-static">1.5</span></div>
       <div class="set-row"><label>Reset everything</label><button class="link-btn danger" id="set-reset">Reset…</button></div>
     </div>
     <p class="settings-foot">Bite · your data lives only on this device</p>
