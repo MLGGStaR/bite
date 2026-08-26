@@ -82,9 +82,35 @@ const Store = {
     return t;
   },
 
+  /* Base goal after the "eat less as you lose weight" reduction:
+     25 kcal per kg lost since the feature was switched on, applied per 1 kg
+     or per 5 kg chunk (−125). Never drops below 1200. */
+  adaptiveGoal() {
+    const p = this.profile;
+    if (!p) return 2000;
+    let g = p.goalKcal;
+    if (p.adaptive && p.adaptiveStartKg) {
+      const lost = Math.max(0, p.adaptiveStartKg - (p.weightKg || p.adaptiveStartKg));
+      const step = p.adaptiveStep === 5 ? 5 : 1;
+      const chunks = Math.floor(lost / step + 1e-6);
+      g = Math.max(1200, g - chunks * step * 25);
+    }
+    return g;
+  },
+
+  adaptiveReduction() { return this.profile ? this.profile.goalKcal - this.adaptiveGoal() : 0; },
+
+  adaptiveLostKg() {
+    const p = this.profile;
+    if (!p?.adaptive || !p.adaptiveStartKg) return 0;
+    return Math.max(0, Math.round((p.adaptiveStartKg - (p.weightKg || p.adaptiveStartKg)) * 10) / 10);
+  },
+
+  /* Today always uses the live goal; past days keep the goal they had (day.g). */
   goalFor(dateKey) {
-    const base = this.profile ? this.profile.goalKcal : 2000;
     const d = this.days[dateKey];
+    const live = this.adaptiveGoal();
+    const base = dateKey === this.todayKey() ? live : (d?.g ?? live);
     return base + (d && d.ex ? (this.profile?.bonus || 0) : 0);
   },
 

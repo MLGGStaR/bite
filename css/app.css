@@ -288,6 +288,30 @@ button { font-family: inherit; border: 0; background: none; color: inherit; curs
 .ex-pill[aria-pressed="true"] .switch { background: linear-gradient(135deg, var(--grad-a), var(--grad-b)); }
 .ex-pill[aria-pressed="true"] .switch .knob { transform: translateX(18px); }
 
+/* ═══════════ generic toggles (adaptive goal etc.) ═══════════ */
+.toggle-row {
+  width: 100%; display: flex; align-items: center; gap: 12px;
+  background: var(--card); border: 1.5px solid var(--line); border-radius: 15px;
+  padding: 13px 14px 13px 16px; text-align: left; margin-bottom: 12px;
+  transition: background .25s, border-color .25s;
+}
+.toggle-row .toggle-text { flex: 1; min-width: 0; }
+.toggle-row .toggle-text strong { display: block; font-size: 15px; font-weight: 700; }
+.toggle-row .toggle-text span { display: block; font-size: 12.5px; color: var(--ink-2); margin-top: 2px; line-height: 1.35; }
+.toggle-row[aria-pressed="true"] { background: var(--tint-accent); border-color: transparent; }
+.toggle-row[aria-pressed="true"] .switch { background: linear-gradient(135deg, var(--grad-a), var(--grad-b)); }
+.toggle-row[aria-pressed="true"] .switch .knob { transform: translateX(18px); }
+.adaptive-step { margin-bottom: 18px; }
+.adaptive-step button { font-size: 13.5px; }
+.switch-btn { display: grid; place-items: center; padding: 2px; }
+.switch-btn[aria-pressed="true"] .switch { background: linear-gradient(135deg, var(--grad-a), var(--grad-b)); }
+.switch-btn[aria-pressed="true"] .switch .knob { transform: translateX(18px); }
+.ring-adapt {
+  display: inline-block; margin-top: 8px; font-size: 12px; font-weight: 700;
+  color: var(--accent); background: var(--tint-accent); border-radius: 9px; padding: 4px 10px;
+  font-variant-numeric: tabular-nums;
+}
+
 /* ═══════════ macros ═══════════ */
 .macros-card { display: flex; flex-direction: column; gap: 16px; padding: 22px 20px; }
 .macro-row { display: grid; grid-template-columns: 62px 1fr auto; align-items: center; gap: 12px; }

@@ -173,6 +173,13 @@ if (__t === "light" || __t === "dark") document.documentElement.dataset.theme = 
         <label for="ob-water">Daily water goal (litres)</label>
         <input id="ob-water" type="number" inputmode="decimal" value="2.5" min="0.5" max="10" step="0.25">
       </div>
+      <button class="toggle-row" id="ob-adaptive" aria-pressed="false">
+        <span class="toggle-text"><strong>Eat less as you lose weight</strong><span>Your goal drops 25 kcal for every kg you lose</span></span>
+        <span class="switch"><span class="knob"></span></span>
+      </button>
+      <div class="segmented adaptive-step hidden" id="ob-adaptive-step">
+        <button data-val="1">Every 1 kg · −25</button><button data-val="5">Every 5 kg · −125</button>
+      </div>
       <div class="ob-actions"><button class="btn-primary" id="ob-finish">Finish setup</button></div>
     </section>
 
@@ -227,6 +234,7 @@ if (__t === "light" || __t === "dark") document.documentElement.dataset.theme = 
           </div>
         </div>
         <p class="ring-sub"><span id="ring-eaten">0</span> eaten · goal <span id="ring-goal">0</span></p>
+        <p class="ring-adapt hidden" id="ring-adapt"></p>
         <button class="ex-pill" id="ex-toggle" aria-pressed="false">
           <span class="ex-flame">
             <svg viewBox="0 0 24 24"><path d="M12 2s1 3.2-1.5 6C8.2 10.5 7 12.3 7 14.5a5 5 0 0 0 10 0c0-1.6-.6-2.9-1.4-4-.3 1-.9 1.9-1.8 2.4.4-2.5-.3-5.8-1.8-7.9z" fill="currentColor"/></svg>
@@ -519,6 +527,14 @@ if (__t === "light" || __t === "dark") document.documentElement.dataset.theme = 
       <div class="set-row"><label for="set-f">Fat g</label><input id="set-f" type="number" inputmode="numeric" placeholder="off"></div>
       <div class="set-row"><label for="set-bonus">Exercise boost</label><input id="set-bonus" type="number" inputmode="numeric"></div>
       <div class="set-row"><label for="set-water">Water goal (L)</label><input id="set-water" type="number" inputmode="decimal" step="0.25"></div>
+      <div class="set-row">
+        <label>Eat less as you lose</label>
+        <button class="switch-btn" id="set-adaptive" aria-pressed="false" aria-label="Eat less as you lose weight"><span class="switch"><span class="knob"></span></span></button>
+      </div>
+      <div class="set-row hidden" id="set-adaptive-step-row"><label>Drop 25 kcal</label>
+        <div class="segmented mini" id="set-adaptive-step"><button data-val="1">per 1 kg</button><button data-val="5">per 5 kg</button></div>
+      </div>
+      <div class="set-row hidden" id="set-adaptive-info-row"><label>Progress</label><span class="set-static" id="adaptive-info"></span></div>
     </div>
 
     <p class="group-label">App</p>
@@ -528,7 +544,7 @@ if (__t === "light" || __t === "dark") document.documentElement.dataset.theme = 
           <button data-val="system">Auto</button><button data-val="light">Light</button><button data-val="dark">Dark</button>
         </div>
       </div>
-      <div class="set-row"><label>Version</label><span class="set-static">1.5</span></div>
+      <div class="set-row"><label>Version</label><span class="set-static">1.6</span></div>
       <div class="set-row"><label>Reset everything</label><button class="link-btn danger" id="set-reset">Reset…</button></div>
     </div>
     <p class="settings-foot">Bite · your data lives only on this device</p>

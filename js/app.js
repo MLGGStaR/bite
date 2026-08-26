@@ -212,7 +212,16 @@ document.addEventListener("visibilitychange", () => { if (document.hidden) Sync.
 
 /* ═══════════════════ onboarding ═══════════════════ */
 
-const OB = { step: 0, name: "", sex: "", age: null, units: "us", ft: 5, in: 8, cm: null, weight: null, activity: 1.375, goal: null, p: null, c: null, f: null, bonus: 300, water: 2.5 };
+const OB = { step: 0, name: "", sex: "", age: null, units: "us", ft: 5, in: 8, cm: null, weight: null, activity: 1.375, goal: null, p: null, c: null, f: null, bonus: 300, water: 2.5, adaptive: false, adaptiveStep: 1 };
+
+/* Labels for the adaptive-goal step picker, in the user's units. */
+function adaptiveStepLabels(units) {
+  const us = units === "us";
+  return { 1: us ? "Every 2.2 lb · −25" : "Every 1 kg · −25", 5: us ? "Every 11 lb · −125" : "Every 5 kg · −125" };
+}
+function fmtKg(kg, units) {
+  return units === "us" ? `${Math.round(kg / 0.45359 * 10) / 10} lb` : `${Math.round(kg * 10) / 10} kg`;
+}
 const OB_STEPS = 6;
 
 function showOnboarding() {
@@ -431,6 +440,17 @@ function wireOnboarding() {
   $("#ob-bonus").addEventListener("input", e => { OB.bonus = +e.target.value || 0; });
   $("#ob-water").addEventListener("input", e => { OB.water = clamp(+e.target.value || 2.5, 0.5, 10); });
 
+  $("#ob-adaptive").addEventListener("click", () => {
+    OB.adaptive = !OB.adaptive;
+    buzz(10);
+    $("#ob-adaptive").setAttribute("aria-pressed", String(OB.adaptive));
+    const labels = adaptiveStepLabels(OB.units);
+    $$("#ob-adaptive-step button").forEach(b => b.textContent = labels[b.dataset.val]);
+    $("#ob-adaptive-step").classList.toggle("hidden", !OB.adaptive);
+    segSet($("#ob-adaptive-step"), OB.adaptiveStep);
+  });
+  segWire($("#ob-adaptive-step"), v => { OB.adaptiveStep = +v; });
+
   $("#ob-finish").addEventListener("click", () => {
     Store.profile = {
       name: OB.name.trim(), sex: OB.sex, age: OB.age,
@@ -438,6 +458,8 @@ function wireOnboarding() {
       units: OB.units, activity: OB.activity,
       goalKcal: OB.goal, macroP: OB.p, macroC: OB.c, macroF: OB.f,
       bonus: OB.bonus, waterGoal: OB.water,
+      adaptive: OB.adaptive, adaptiveStep: OB.adaptiveStep,
+      adaptiveStartKg: OB.adaptive ? Math.round(obWeightKg() * 10) / 10 : null,
     };
     Store.saveProfile();
     successPop();
@@ -541,12 +563,18 @@ function renderToday(animate) {
   const p = Store.profile;
   const t = Store.totals(currentDateKey);
   const day = Store.day(currentDateKey);
+  // Freeze today's base goal onto the day record so history keeps the goal it had.
+  const liveGoal = Store.adaptiveGoal();
+  if (day.g !== liveGoal) { day.g = liveGoal; Store.saveDays(); Sync.mark("day", currentDateKey); }
   const goal = Store.goalFor(currentDateKey);
   const left = goal - t.kcal;
 
   $("#header-date").textContent = headerDate();
   $("#ex-bonus-label").textContent = `+${fmt(p.bonus || 0)}`;
   $("#ex-toggle").setAttribute("aria-pressed", String(day.ex));
+  const red = Store.adaptiveReduction();
+  $("#ring-adapt").classList.toggle("hidden", !(red > 0));
+  if (red > 0) $("#ring-adapt").textContent = `↓ ${fmt(red)} kcal · ${fmtKg(Store.adaptiveLostKg(), p.units)} lost`;
 
   // ring
   const frac = clamp(t.kcal / goal, 0, 1);
@@ -1259,10 +1287,14 @@ function wireWeight() {
     const us = Store.profile.units === "us";
     const v = +$("#weight-input").value;
     if (!(v > 20 && v < (us ? 1500 : 700))) { toast("Enter a weight first", "err"); return; }
+    const goalBefore = Store.adaptiveGoal();
     Store.logWeight(Math.round((us ? v * 0.45359 : v) * 10) / 10);
     closeSheet();
     renderHistory();
-    toast("Weight logged", "ok");
+    renderToday(false);
+    const goalAfter = Store.adaptiveGoal();
+    if (goalAfter < goalBefore) toast(`Nice — goal is now ${fmt(goalAfter)} kcal 🎉`, "ok");
+    else toast("Weight logged", "ok");
   });
 }
 
@@ -1380,6 +1412,19 @@ function wireSettings() {
   bind("#set-bonus", v => Store.profile.bonus = Math.max(0, Math.round(+v || 0)));
   bind("#set-water", v => { const n = +v; if (n >= 0.5 && n <= 10) Store.profile.waterGoal = Math.round(n * 100) / 100; });
 
+  $("#set-adaptive").addEventListener("click", () => {
+    const p = Store.profile;
+    p.adaptive = !p.adaptive;
+    if (p.adaptive) {
+      p.adaptiveStartKg = p.weightKg;           // start counting from today's weight
+      p.adaptiveStep = p.adaptiveStep === 5 ? 5 : 1;
+    }
+    buzz(10);
+    saveSettings();
+    populateSettings();
+  });
+  segWire($("#set-adaptive-step"), v => { Store.profile.adaptiveStep = +v; saveSettings(); populateSettings(); });
+
   $("#settings-done").addEventListener("click", closeSheet);
 
   segWire($("#set-theme"), v => {
@@ -1440,6 +1485,18 @@ function populateSettings() {
   $("#set-bonus").value = p.bonus;
   $("#set-water").value = p.waterGoal || 2.5;
   segSet($("#set-theme"), Store.flags.theme || "system");
+
+  const on = !!p.adaptive;
+  $("#set-adaptive").setAttribute("aria-pressed", String(on));
+  $("#set-adaptive-step-row").classList.toggle("hidden", !on);
+  $("#set-adaptive-info-row").classList.toggle("hidden", !on);
+  if (on) {
+    $$("#set-adaptive-step button").forEach(b => b.textContent = us ? (b.dataset.val === "5" ? "per 11 lb" : "per 2.2 lb") : `per ${b.dataset.val} kg`);
+    segSet($("#set-adaptive-step"), p.adaptiveStep === 5 ? 5 : 1);
+    const red = Store.adaptiveReduction();
+    $("#adaptive-info").textContent =
+      `${fmtKg(Store.adaptiveLostKg(), p.units)} lost · goal ${red > 0 ? `−${fmt(red)}` : "unchanged"}`;
+  }
 }
 
 function openSettings() {
