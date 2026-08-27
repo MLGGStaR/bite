@@ -150,6 +150,68 @@ const Store = {
     if (this.profile) { this.profile.weightKg = kg; this.saveProfile(); }
   },
 
+  /* ---- analytics (Insights tab) ---- */
+
+  shiftKey(k, delta) {
+    const [y, m, d] = k.split("-").map(Number);
+    const dt = new Date(y, m - 1, d + delta);
+    const p = n => String(n).padStart(2, "0");
+    return `${dt.getFullYear()}-${p(dt.getMonth() + 1)}-${p(dt.getDate())}`;
+  },
+
+  logged(k) { return (this.days[k]?.entries?.length || 0) > 0; },
+
+  /* Consecutive logged days up to today (today not yet logged doesn't break it). */
+  streak() {
+    let n = 0, offset = this.logged(this.todayKey()) ? 0 : 1;
+    if (offset === 1 && !this.logged(this.todayKey(-1))) return 0;
+    while (this.logged(this.todayKey(-offset))) { n++; offset++; }
+    return n;
+  },
+
+  bestStreak() {
+    const set = new Set(Object.keys(this.days).filter(k => this.logged(k)));
+    let best = 0;
+    for (const k of set) {
+      if (set.has(this.shiftKey(k, -1))) continue; // only count from a run's start
+      let run = 0, cur = k;
+      while (set.has(cur)) { run++; cur = this.shiftKey(cur, 1); }
+      best = Math.max(best, run);
+    }
+    return best;
+  },
+
+  weekStats() {
+    let sum = 0, logged = 0, onTarget = 0, pSum = 0;
+    for (let i = 0; i < 7; i++) {
+      const k = this.todayKey(-i), t = this.totals(k);
+      if (t.n > 0) { logged++; sum += t.kcal; pSum += t.p; if (t.kcal <= this.goalFor(k)) onTarget++; }
+    }
+    return { avg: logged ? Math.round(sum / logged) : 0, logged, onTarget, avgP: logged ? Math.round(pSum / logged) : 0 };
+  },
+
+  macroAverages(nDays = 14) {
+    let p = 0, c = 0, f = 0, days = 0;
+    for (let i = 0; i < nDays; i++) {
+      const t = this.totals(this.todayKey(-i));
+      if (t.n > 0) { p += t.p; c += t.c; f += t.f; days++; }
+    }
+    if (!days) return null;
+    p /= days; c /= days; f /= days;
+    const pc = p * 4, cc = c * 4, fc = f * 9, tot = pc + cc + fc || 1;
+    return { p: Math.round(p), c: Math.round(c), f: Math.round(f), days,
+      pPct: pc / tot, cPct: cc / tot, fPct: fc / tot, kcal: Math.round(pc + cc + fc) };
+  },
+
+  trendSeries(nDays = 30) {
+    const out = [];
+    for (let i = nDays - 1; i >= 0; i--) {
+      const k = this.todayKey(-i), t = this.totals(k);
+      out.push({ k, kcal: t.kcal, goal: this.goalFor(k), has: t.n > 0 });
+    }
+    return out;
+  },
+
   /* Mifflin-St Jeor maintenance estimate */
   maintenance(sex, age, heightCm, weightKg, activity) {
     if (!age || !heightCm || !weightKg) return null;

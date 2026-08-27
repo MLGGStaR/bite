@@ -31,6 +31,7 @@ window.addEventListener("DOMContentLoaded", () => {
   wireEntrySheet();
   wireSettings();
   wireWeight();
+  wireInsights();
 
   if (Store.profile) enterApp(false);
   else showOnboarding();
@@ -493,6 +494,8 @@ function enterApp(fresh) {
   if (IS_IOS && !IS_STANDALONE && !Store.flags.bannerDismissed) $("#install-banner").classList.remove("hidden");
   renderToday(true);
   renderHistory();
+  const tv = $("#view-today");
+  tv.classList.remove("enter"); void tv.offsetWidth; tv.classList.add("enter");
   if (fresh) toast(`Welcome, ${Store.profile.name} 👋`, "ok");
 }
 
@@ -504,7 +507,7 @@ const targetKey = () => Store.todayKey(addOffset);
 const entryTime = () => Date.now() + addOffset * 86400000;
 
 function wireApp() {
-  $$(".tab").forEach(t => t.addEventListener("click", () => switchView(t.dataset.view)));
+  $$(".tab[data-view]").forEach(t => t.addEventListener("click", () => switchView(t.dataset.view)));
   $("#btn-add").addEventListener("click", () => {
     buzz(10);
     addOffset = 0;
@@ -513,7 +516,7 @@ function wireApp() {
     openSheet($("#sheet-add"));
   });
   segWire($("#day-toggle"), v => { addOffset = +v; });
-  $("#btn-settings").addEventListener("click", openSettings);
+  $("#tab-settings").addEventListener("click", openSettings);
   $("#install-banner-x").addEventListener("click", () => {
     Store.flags.bannerDismissed = true; Store.saveFlags();
     $("#install-banner").classList.add("hidden");
@@ -557,16 +560,25 @@ function renderWater() {
   $(".water-card").classList.toggle("done", w >= goal);
 }
 
+const VIEWS = ["today", "history", "insights"];
+const VIEW_META = {
+  today:    () => ["Today", headerDate()],
+  history:  () => ["History", "Your week at a glance"],
+  insights: () => ["Insights", "Your trends with Claude"],
+};
+
 function switchView(name) {
-  $$(".tab").forEach(t => t.classList.toggle("active", t.dataset.view === name));
-  const showToday = name === "today";
-  const view = showToday ? $("#view-today") : $("#view-history");
-  $("#view-today").classList.toggle("hidden", !showToday);
-  $("#view-history").classList.toggle("hidden", showToday);
+  $$(".tab[data-view]").forEach(t => t.classList.toggle("active", t.dataset.view === name));
+  VIEWS.forEach(v => $("#view-" + v).classList.toggle("hidden", v !== name));
+  const view = $("#view-" + name);
   view.classList.remove("enter"); void view.offsetWidth; view.classList.add("enter");
-  $("#header-title").textContent = showToday ? "Today" : "History";
-  $("#header-date").textContent = showToday ? headerDate() : "Your week at a glance";
-  if (!showToday) renderHistory();
+  const [title, eyebrow] = VIEW_META[name]();
+  $("#header-title").textContent = title;
+  $("#header-date").textContent = eyebrow;
+  updateHeaderStreak();
+  if (name === "history") renderHistory();
+  if (name === "insights") renderInsights();
+  window.scrollTo(0, 0);
 }
 
 function headerDate() {
@@ -587,6 +599,7 @@ function renderToday(animate) {
   const left = goal - t.kcal;
 
   $("#header-date").textContent = headerDate();
+  updateHeaderStreak();
   $("#ex-bonus-label").textContent = `+${fmt(p.bonus || 0)}`;
   $("#ex-toggle").setAttribute("aria-pressed", String(day.ex));
   const red = Store.adaptiveReduction();
@@ -1343,6 +1356,210 @@ function renderWeightCard() {
   hint.textContent = Math.abs(delta) < 0.05
     ? `Steady over the last ${span} day${span > 1 ? "s" : ""}`
     : `${delta < 0 ? "Down" : "Up"} ${Math.round(amt * 10) / 10} ${us ? "lb" : "kg"} over ${span} day${span > 1 ? "s" : ""}`;
+}
+
+/* ═══════════════════ insights ═══════════════════ */
+
+function updateHeaderStreak() {
+  const s = Store.streak();
+  const badge = $("#header-streak");
+  badge.classList.toggle("hidden", s < 2);
+  if (s >= 2) $("#header-streak-num").textContent = s;
+}
+
+function wireInsights() {
+  $("#recap-refresh").addEventListener("click", () => loadRecap(true));
+}
+
+function renderInsights() {
+  const s = Store.streak(), best = Store.bestStreak();
+  animateNum($("#streak-num"), s, 700);
+  $("#streak-unit").textContent = s === 1 ? "day" : "day streak";
+  $("#streak-best").textContent = best;
+  $(".streak-card").classList.toggle("lit", s > 0);
+
+  const ws = Store.weekStats();
+  animateNum($("#stat-avg"), ws.avg, 700);
+  $("#stat-ontarget").textContent = `${ws.onTarget}/${ws.logged}`;
+  animateNum($("#stat-protein"), ws.avgP, 700);
+
+  renderMacroDonut(Store.macroAverages(14));
+  renderTrend(Store.trendSeries(30));
+  renderRecapInitial();
+}
+
+function renderMacroDonut(m) {
+  const svg = $("#macro-donut"), legend = $("#donut-legend");
+  const empty = $("#macro-empty");
+  if (!m) {
+    empty.classList.remove("hidden");
+    $(".donut-wrap").classList.add("hidden");
+    $("#macro-note").textContent = "";
+    return;
+  }
+  empty.classList.add("hidden");
+  $(".donut-wrap").classList.remove("hidden");
+  $("#macro-note").textContent = `avg of ${m.days} day${m.days > 1 ? "s" : ""}`;
+
+  const r = 50, C = 2 * Math.PI * r, GAP = 3;
+  const segs = [["p", m.pPct], ["c", m.cPct], ["f", m.fPct]];
+  const colorVar = { p: "var(--p)", c: "var(--c)", f: "var(--f)" };
+  let off = 0;
+  const ring = segs.map(([k, pct]) => {
+    const len = Math.max(0, pct * C - GAP);
+    const seg = `<circle class="donut-seg" cx="60" cy="60" r="${r}" fill="none" stroke="${colorVar[k]}" stroke-width="13" stroke-dasharray="0 ${C}" data-len="${len.toFixed(1)}" stroke-dashoffset="${(-off).toFixed(1)}" transform="rotate(-90 60 60)"/>`;
+    off += pct * C;
+    return seg;
+  }).join("");
+  svg.innerHTML =
+    `<circle cx="60" cy="60" r="${r}" fill="none" stroke="var(--fill-2)" stroke-width="13"/>` + ring +
+    `<text id="donut-center-num" class="donut-center-num" x="60" y="58" text-anchor="middle">${fmt(m.kcal)}</text>` +
+    `<text class="donut-center-label" x="60" y="72" text-anchor="middle">kcal/day</text>`;
+  // animate segments in
+  requestAnimationFrame(() => $$(".donut-seg", svg).forEach(el => {
+    el.style.strokeDasharray = `${el.dataset.len} ${C}`;
+  }));
+
+  const names = { p: "Protein", c: "Carbs", f: "Fat" };
+  const pcts = { p: m.pPct, c: m.cPct, f: m.fPct }, grams = { p: m.p, c: m.c, f: m.f };
+  legend.innerHTML = ["p", "c", "f"].map(k =>
+    `<div class="leg-row"><span class="leg-dot ${k}"></span><span class="leg-name">${names[k]}</span><span class="leg-val">${grams[k]} g<span class="leg-pct">${Math.round(pcts[k] * 100)}%</span></span></div>`
+  ).join("");
+}
+
+function renderTrend(series) {
+  const svg = $("#trend-chart"), empty = $("#trend-empty");
+  const logged = series.filter(d => d.has);
+  if (logged.length < 2) {
+    empty.classList.remove("hidden");
+    svg.style.display = "none";
+    $("#trend-note").textContent = "";
+    return;
+  }
+  empty.classList.add("hidden");
+  svg.style.display = "";
+  const W = 300, H = 96, top = 8, bot = 82;
+  const goal = Store.profile.goalKcal;
+  const max = Math.max(goal * 1.15, ...series.map(d => d.kcal)) || 1;
+  const x = i => (i / (series.length - 1)) * W;
+  const y = v => bot - (v / max) * (bot - top);
+  const line = series.map((d, i) => `${x(i).toFixed(1)},${y(d.kcal).toFixed(1)}`);
+  const areaPts = `0,${bot} ${line.join(" ")} ${W},${bot}`;
+  const gy = y(goal).toFixed(1);
+  const last = series.length - 1;
+  svg.innerHTML =
+    `<defs>
+       <linearGradient id="trendStroke" x1="0" y1="0" x2="1" y2="0">
+         <stop offset="0%" stop-color="#FFA51F"/><stop offset="100%" stop-color="#FF3B5C"/>
+       </linearGradient>
+       <linearGradient id="trendFill" x1="0" y1="0" x2="0" y2="1">
+         <stop offset="0%" stop-color="rgba(255,90,80,.22)"/><stop offset="100%" stop-color="rgba(255,90,80,0)"/>
+       </linearGradient>
+     </defs>
+     <line class="trend-goal" x1="0" y1="${gy}" x2="${W}" y2="${gy}"/>
+     <text class="trend-goal-label" x="2" y="${(+gy - 4).toFixed(1)}">GOAL ${fmt(goal)}</text>
+     <polygon class="trend-area" points="${areaPts}" fill="url(#trendFill)" style="opacity:0"/>
+     <polyline class="trend-line" points="${line.join(" ")}"/>
+     <circle class="trend-dot" cx="${x(last).toFixed(1)}" cy="${y(series[last].kcal).toFixed(1)}" r="3.5"/>`;
+
+  // draw-in animation for the line, fade for the area
+  const poly = $(".trend-line", svg);
+  try {
+    const len = poly.getTotalLength();
+    poly.style.strokeDasharray = len; poly.style.strokeDashoffset = len;
+    poly.style.transition = "none";
+    requestAnimationFrame(() => {
+      poly.style.transition = "stroke-dashoffset .9s var(--ease-out)";
+      poly.style.strokeDashoffset = 0;
+      $(".trend-area", svg).style.opacity = 1;
+    });
+  } catch { $(".trend-area", svg).style.opacity = 1; }
+
+  const avg = Math.round(logged.reduce((s, d) => s + d.kcal, 0) / logged.length);
+  $("#trend-note").textContent = `avg ${fmt(avg)} kcal`;
+}
+
+/* ---- AI weekly recap ---- */
+
+function weekKey() {
+  const d = new Date();
+  const jan1 = new Date(d.getFullYear(), 0, 1);
+  const week = Math.ceil((((d - jan1) / 86400000) + jan1.getDay() + 1) / 7);
+  return `${d.getFullYear()}-W${week}`;
+}
+
+function buildWeekSummary() {
+  const p = Store.profile, lines = [];
+  lines.push(`Daily calorie goal: ${p.goalKcal} kcal.`);
+  if (p.macroP || p.macroC || p.macroF)
+    lines.push(`Macro goals: protein ${p.macroP || "—"}g, carbs ${p.macroC || "—"}g, fat ${p.macroF || "—"}g.`);
+  for (let i = 6; i >= 0; i--) {
+    const k = Store.todayKey(-i), t = Store.totals(k), d = Store.day(k);
+    const day = new Date(k + "T12:00:00").toLocaleDateString("en-US", { weekday: "short" });
+    if (t.n > 0)
+      lines.push(`${day}: ${t.kcal} kcal (goal ${Store.goalFor(k)}), protein ${Math.round(t.p)}g, carbs ${Math.round(t.c)}g, fat ${Math.round(t.f)}g, water ${d.water || 0}L${d.ex ? ", exercise day" : ""}.`);
+    else lines.push(`${day}: nothing logged.`);
+  }
+  const w = Store.weights;
+  if (w.length >= 2) {
+    const first = w[Math.max(0, w.length - 8)], last = w[w.length - 1];
+    const dk = Math.round((last.kg - first.kg) * 10) / 10;
+    lines.push(`Recent weight change: ${dk > 0 ? "+" : ""}${dk} kg.`);
+  }
+  return lines.join("\n");
+}
+
+const SPARK = `<svg viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8zM18.5 15.5l.9 2.6 2.6.9-2.6.9-.9 2.6-.9-2.6-2.6-.9 2.6-.9z" fill="currentColor"/></svg>`;
+
+function renderRecapInitial() {
+  const cached = Store.flags.recap;
+  if (cached && cached.week === weekKey()) { renderRecap(cached); return; }
+  const enough = Store.weekStats().logged >= 2;
+  $("#recap-refresh").classList.add("hidden");
+  $("#recap-body").innerHTML =
+    `<p class="recap-intro">Let Claude read your week and share one insight — what's going well and one thing to try next.</p>
+     <button class="recap-cta" id="recap-go" ${enough ? "" : "disabled"}>${SPARK}<span>${enough ? "Get this week's insight" : "Log 2+ days to unlock"}</span></button>`;
+  const go = $("#recap-go");
+  if (go && enough) go.addEventListener("click", () => loadRecap(false));
+}
+
+function renderRecapLoading() {
+  $("#recap-refresh").classList.add("hidden");
+  $("#recap-body").innerHTML =
+    `<div class="recap-skel">
+       <div class="sk skeleton w1"></div>
+       <div class="sk skeleton w2"></div><div class="sk skeleton w3"></div><div class="sk skeleton w4"></div>
+     </div>
+     <p class="recap-foot">Claude is reading your week…</p>`;
+}
+
+function renderRecap(rec) {
+  $("#recap-refresh").classList.remove("hidden");
+  $("#recap-body").innerHTML =
+    `<div class="recap-result">
+       <div class="recap-headline">${SPARK}<span>${esc(rec.headline)}</span></div>
+       <p class="recap-insight">${esc(rec.insight)}</p>
+       <div class="recap-tip"><strong>Try this →</strong> ${esc(rec.tip)}</div>
+     </div>`;
+}
+
+async function loadRecap(force) {
+  const wk = weekKey(), cached = Store.flags.recap;
+  if (!force && cached && cached.week === wk) { renderRecap(cached); return; }
+  renderRecapLoading();
+  try {
+    const res = await AI.weeklyInsight(buildWeekSummary());
+    const rec = { week: wk, headline: res.headline, insight: res.insight, tip: res.tip };
+    Store.flags.recap = rec; Store.saveFlags();
+    renderRecap(rec);
+    buzz(10);
+  } catch (e) {
+    $("#recap-refresh").classList.add("hidden");
+    $("#recap-body").innerHTML =
+      `<p class="recap-intro">${esc(e.message || "Couldn't reach Claude — try again.")}</p>
+       <button class="recap-cta" id="recap-go">${SPARK}<span>Try again</span></button>`;
+    $("#recap-go").addEventListener("click", () => loadRecap(true));
+  }
 }
 
 function renderHistory() {

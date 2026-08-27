@@ -179,6 +179,33 @@ const AI = {
     });
   },
 
+  WEEKLY_SCHEMA: {
+    type: "object", additionalProperties: false,
+    properties: {
+      headline: { type: "string", description: "A warm, specific 3-6 word headline about the week, e.g. 'Strong protein, steady deficit'." },
+      insight: { type: "string", description: "2-3 sentences: the single most useful, specific observation about this week's eating, referencing real numbers from the data. Encouraging, never preachy or alarmist." },
+      tip: { type: "string", description: "One concrete, encouraging, actionable suggestion for next week." },
+    },
+    required: ["headline", "insight", "tip"],
+  },
+
+  WEEKLY_SYSTEM:
+    "You are Bite's friendly nutrition coach. You're given a week of one person's calorie, macro, water and weight data. " +
+    "Give ONE genuinely useful, specific insight about their week — reference the real numbers you see (days on target, protein trend, a standout day). " +
+    "Be warm, concise and encouraging; celebrate progress. Never be preachy or alarmist, and never give medical advice or suggest extreme restriction.",
+
+  async weeklyInsight(summaryText) {
+    return this.request({
+      model: this.mealModel(),
+      system: this.WEEKLY_SYSTEM,
+      content: [{ type: "text", text: `Here is my week:\n${summaryText}\n\nGive me my weekly insight.` }],
+      schema: this.WEEKLY_SCHEMA,
+      maxTokens: 3000,
+      effort: "low",
+      timeoutMs: 60000,
+    });
+  },
+
   async describeMeal(text) {
     return this.request({
       model: this.mealModel(),
